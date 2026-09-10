@@ -178,6 +178,12 @@ table.kmap{border-collapse:separate;border-spacing:3px;font-family:ui-monospace,
 .selexpr{margin:8px 0 4px;word-break:break-word}
 .selexpr .math{font-size:16px}
 #summary .btn{margin-top:8px}
+.disppick{display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.disppick:empty{display:none}
+.disppick .btn.g{color:var(--ok-ink)}
+.disppick .btn.g::after{content:" ✓"}
+.minis{display:inline-flex;gap:2px;vertical-align:middle}
+.minis .mini{margin:0}
 
 /* ---------- dialogs ---------- */
 dialog{border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);max-width:720px;width:calc(100% - 40px);padding:22px 26px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
@@ -264,7 +270,11 @@ svg text{pointer-events:none;user-select:none}
     <select id="bits" title="How many outputs the controller has">
       <option value="1">1 bit</option><option value="2">2 bits</option><option value="3">3 bits</option>
       <option value="4">4 bits</option><option value="5">5 bits</option><option value="6">6 bits</option>
+      <option value="7">7 bits</option><option value="8">8 bits</option>
     </select>
+  </label>
+  <label title="How many 7-segment displays (digits) the number is shown on">Displays
+    <select id="disps"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select>
   </label>
   <label>Show
     <select id="mode">
@@ -273,7 +283,10 @@ svg text{pointer-events:none;user-select:none}
       <option value="decblank">0–9 (10+ = blank)</option>
     </select>
   </label>
-  <label>Display
+  <label id="leadLbl" title="What the higher displays show for small numbers, e.g. 7 as ' 7' (blank) or '07'">Leading zeros
+    <select id="lead"><option value="blank">blank</option><option value="zero">show 0</option></select>
+  </label>
+  <label>Display type
     <select id="disptype">
       <option value="cc">Common cathode (1 = lit)</option>
       <option value="ca">Common anode (0 = lit)</option>
@@ -341,6 +354,7 @@ svg text{pointer-events:none;user-select:none}
   <aside class="right" id="rightPanel">
     <div id="taskCard"></div>
     <div id="summary"></div>
+    <div id="dispPick" class="disppick"></div>
     <div class="tabs">
       <button class="tab" data-tab="table">Truth table</button>
       <button class="tab" data-tab="kmap">Karnaugh map</button>
@@ -384,6 +398,7 @@ svg text{pointer-events:none;user-select:none}
     <li><b>Delete:</b> <kbd>Delete</kbd>, or right-click a part. <b>Copy/paste:</b> <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd>. <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicates.</li>
     <li><b>Inputs:</b> click a row on the controller, press <kbd>A</kbd> <kbd>B</kbd> <kbd>C</kbd> <kbd>D</kbd>, click a truth-table row or K-map cell, or use <kbd>↑</kbd>/<kbd>↓</kbd>.</li>
     <li><b>Find mistakes:</b> on the display, a <b>dashed</b> segment should be lit and a <b>yellow</b> segment should be off. <b>➜ Jump to a wrong digit</b> takes you to the next digit that is still wrong.</li>
+    <li><b>More displays:</b> choose 2–4 <b>Displays</b> in the top bar to show bigger numbers, e.g. 0–15 in decimal. The ones display is on the right. Above the tabs in the check panel you choose which display to check.</li>
     <li><b>View:</b> drag the empty board to pan; use the mouse wheel to zoom.</li>
     <li><b>Undo/redo:</b> <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd>. Your work is saved in this browser automatically. <b>🖼 Image</b> saves a picture you can hand in.</li>
   </ul>
@@ -427,8 +442,15 @@ const TASKS = [
   {id:'t6', title:'6 · Common anode', desc:'Like the BCD decoder, but the display lights a segment when its pin is 0. Every output is inverted!', set:{bits:4, mode:'dec', disp:'ca'}},
   {id:'t7', title:'7 · NAND only: 0–3', desc:'Build the 0–3 decoder using only NAND gates. Any logic function can be built from NAND alone!', set:{bits:2, mode:'hex', disp:'cc', allowed:['NAND']}},
   {id:'t8', title:'8 · NOR only: 0–3', desc:'The same decoder, but with only NOR gates.', set:{bits:2, mode:'hex', disp:'cc', allowed:['NOR']}},
+  {id:'t9', title:'9 · Two displays: 0–15', desc:'Show 0–15 in decimal on two displays. The tens display only has to show 1, or stay blank for 0–9.', set:{bits:4, mode:'dec', disp:'cc', disps:2, lead:'blank'}},
+  {id:'t10', title:'10 · Two hex digits: 00–FF', desc:'8 bits shown as two hex digits. Each display only needs 4 of the bits, so you can build the hex decoder twice!', set:{bits:8, mode:'hex', disp:'cc', disps:2, lead:'zero'}},
+  {id:'t11', title:'11 · Decimal 0–31', desc:'5 bits shown as a decimal number on two displays. Converting binary to decimal is the hardest challenge!', set:{bits:5, mode:'dec', disp:'cc', disps:2, lead:'blank'}},
 ];
-const MODE_LABEL = {hex:'Hex 0–F', dec:'0–9 (10+ don\'t care)', decblank:'0–9 (10+ blank)'};
+function modeLabel(mode, n = 1) {
+  const dmax = 10 ** n - 1;
+  if (mode === 'hex') return `Hex ${'0'.repeat(n)}–${'F'.repeat(n)}`;
+  return mode === 'dec' ? `0–${dmax} (${dmax + 1}+ = don't care)` : `0–${dmax} (${dmax + 1}+ = blank)`;
+}
 const LETTERS = 'ABCDEFGH';
 // colours used for the exported picture (always light, so it prints well)
 const LIGHT_VARS = {'--panel':'#ffffff', '--ink':'#1e293b', '--muted':'#64748b', '--line':'#dde3ec', '--accent':'#2563eb',
@@ -457,29 +479,38 @@ let clip = null, pasteN = 0;
 let lastSelSig = '', lastAnaSig = '', lastAllOk = null;
 let revealed = new Set(), revealKey = '';   // segments whose solution is shown
 let hoverComp = null, suppressCtx = false, lastAna = null;
+let dispSel = 0;                 // which display the check panel shows (0 = ones)
+const solCache = new Map();      // solutions only depend on the settings
 const NOSOL = new URLSearchParams(location.search).has('nosolution');   // ?nosolution hides all solutions
 
 const svg = $('#svg'), world = $('#world'), viewport = $('#viewport');
 
 function defaultState() {
-  return {bits: 4, mode: 'hex', disp: 'cc', task: 'free', allowed: null, inputs: [0,0,0,0],
+  return {bits: 4, mode: 'hex', disp: 'cc', disps: 1, lead: 'blank', task: 'free', allowed: null, inputs: [0,0,0,0],
     comps: [{id:'ctrl', type:'CTRL', x:40, y:60}, {id:'disp', type:'DISP', x:760, y:60}],
     wires: []};
 }
 
 function normalize(o) {
   if (!o || typeof o !== 'object' || !Array.isArray(o.comps) || !Array.isArray(o.wires)) return null;
-  const bits = clamp(parseInt(o.bits) || 4, 1, 6);
+  const bits = clamp(parseInt(o.bits) || 4, 1, 8);
+  const disps = clamp(parseInt(o.disps) || 1, 1, 4);
   const allowed = Array.isArray(o.allowed) ? o.allowed.filter(isGate) : [];
   const s = {bits, mode: ['hex','dec','decblank'].includes(o.mode) ? o.mode : 'hex',
     disp: o.disp === 'ca' ? 'ca' : 'cc',
+    disps, lead: o.lead === 'zero' ? 'zero' : 'blank',
     task: TASKS.some(t => t.id === o.task) ? o.task : 'free',
     allowed: allowed.length ? allowed : null,
     inputs: [], comps: [], wires: []};
   const idOk = id => typeof id === 'string' && /^[\w-]{1,40}$/.test(id);
   for (const c of o.comps) {
     if (!c || !(isGate(c.type) || ['CTRL','DISP','CONST','NOTE'].includes(c.type))) continue;
-    const id = c.type === 'CTRL' ? 'ctrl' : c.type === 'DISP' ? 'disp' : (idOk(c.id) ? c.id : uid());
+    let id = c.type === 'CTRL' ? 'ctrl' : (idOk(c.id) ? c.id : uid());
+    if (c.type === 'DISP') {   // displays are disp (ones), disp1 (tens), disp2, disp3
+      const m = /^disp([1-3]?)$/.exec(c.id || 'disp');
+      if (!m || (m[1] ? +m[1] : 0) >= disps) continue;
+      id = m[0];
+    }
     if (s.comps.some(x => x.id === id)) continue;
     const nc = {id, type: c.type, x: snap(+c.x || 0), y: snap(+c.y || 0)};
     if (isGate(c.type) && c.type !== 'NOT') nc.n = clamp(parseInt(c.n) || 2, 2, 4);
@@ -488,7 +519,10 @@ function normalize(o) {
     s.comps.push(nc);
   }
   if (!s.comps.some(c => c.id === 'ctrl')) s.comps.unshift({id:'ctrl', type:'CTRL', x:40, y:60});
-  if (!s.comps.some(c => c.id === 'disp')) s.comps.push({id:'disp', type:'DISP', x:760, y:60});
+  for (let k = 0; k < disps; k++) {
+    const id = k ? 'disp' + k : 'disp';
+    if (!s.comps.some(c => c.id === id)) s.comps.push({id, type: 'DISP', x: 760 + (disps - 1 - k) * 230, y: 60});
+  }
   s.inputs = Array.from({length: bits}, (_, i) => Array.isArray(o.inputs) && o.inputs[i] ? 1 : 0);
   const byId = new Map(s.comps.map(c => [c.id, c]));
   const used = new Set();
@@ -599,7 +633,8 @@ function srcName(from, byId) {
 function dstName(to, byId) {
   const c = byId.get(to.c);
   if (!c) return '?';
-  return c.type === 'DISP' ? 'segment ' + SEG[to.p] : `${c.type} input ${to.p + 1}`;
+  if (c.type !== 'DISP') return `${c.type} input ${to.p + 1}`;
+  return (S.disps > 1 ? dispName(dispIndex(c.id)).toLowerCase() + ' ' : '') + 'segment ' + SEG[to.p];
 }
 function wirePath(a, b) {
   const d = Math.max(30, Math.abs(b.x - a.x) * 0.5);
@@ -645,33 +680,56 @@ function evaluate(inVals, idx) {
       if (out.get(g.id + ':0') !== v) { out.set(g.id + ':0', v); stable = false; }
     }
   }
-  return {out, disp: Array.from({length: 7}, (_, i) => src('disp', i)), stable};
+  return {out, disps: Array.from({length: S.disps}, (_, k) => Array.from({length: 7}, (_, i) => src(dispId(k), i))), stable};
 }
 const litOf = lvl => lvl === null ? false : (S.disp === 'cc' ? lvl === 1 : lvl === 0);
 const levelOf = lit => S.disp === 'cc' ? (lit ? 1 : 0) : (lit ? 0 : 1);
-function expectedLit(v) {
-  const pat = p => p.split('').map(ch => ch === '1');
-  if (S.mode === 'hex') return v < 16 ? pat(DIGITS[v]) : null;
-  if (v < 10) return pat(DIGITS[v]);
-  return S.mode === 'decblank' ? Array(7).fill(false) : null;
+// ---- displays: k = 0 is the ones digit (id 'disp'), k = 1 tens ('disp1'), ...
+const dispId = k => k ? 'disp' + k : 'disp';
+const dispIndex = id => id === 'disp' ? 0 : +id.slice(4);
+const PLACE_DEC = ['Ones', 'Tens', 'Hundreds', 'Thousands'], PLACE_HEX = ['16⁰', '16¹', '16²', '16³'];
+function dispName(k) {
+  if (S.disps === 1) return 'Display';
+  return S.mode === 'hex' ? `Digit ${PLACE_HEX[k]}` : PLACE_DEC[k];
 }
-function digitLabel(v) {
-  if (!expectedLit(v)) return 'X';
-  if (S.mode === 'decblank' && v >= 10) return '␣';
-  return DIGIT_CHARS[v];
+// digit shown on display k for input value v: 0–15, 'blank', or null (don't care)
+function digitOf(v, k) {
+  const b = S.mode === 'hex' ? 16 : 10;
+  if (v >= b ** S.disps) return S.mode === 'decblank' ? 'blank' : null;
+  if (k > 0 && S.lead === 'blank' && v < b ** k) return 'blank';
+  return Math.floor(v / b ** k) % b;
+}
+// expected lit segments for every display, or null for a don't-care input
+function expectedAll(v) {
+  if (digitOf(v, 0) === null) return null;
+  return Array.from({length: S.disps}, (_, k) => {
+    const d = digitOf(v, k);
+    return d === 'blank' ? Array(7).fill(false) : DIGITS[d].split('').map(ch => ch === '1');
+  });
+}
+function digitChar(v, k) {
+  const d = digitOf(v, k);
+  return d === null ? 'X' : d === 'blank' ? '␣' : DIGIT_CHARS[d];
+}
+function numberLabel(v) {
+  if (digitOf(v, 0) === null) return 'X';
+  let s = '';
+  for (let k = S.disps - 1; k >= 0; k--) s += digitChar(v, k);
+  return s;
 }
 function analyze(idx) {
   const rows = [];
   let ok = 0, cnt = 0, unstable = false;
   for (let v = 0; v < (1 << S.bits); v++) {
-    const ins = toInputs(v), r = evaluate(ins, idx), exp = expectedLit(v);
-    const lit = r.disp.map(litOf);
-    const good = exp ? exp.every((b, i) => b === lit[i]) : null;
+    const ins = toInputs(v), r = evaluate(ins, idx), exp = expectedAll(v);
+    const lit = r.disps.map(d => d.map(litOf));
+    const good = exp ? exp.every((p, k) => p.every((b, i) => b === lit[k][i])) : null;
     if (!r.stable) unstable = true;
     if (exp) { cnt++; if (good) ok++; }
-    rows.push({v, ins, exp, lvl: r.disp, lit, good});
+    rows.push({v, ins, exp, lvl: r.disps, lit, good});   // exp/lvl/lit are indexed [display][segment]
   }
-  const segGood = SEG.split('').map((_, i) => rows.every(r => !r.exp || r.exp[i] === r.lit[i]));
+  const segGood = Array.from({length: S.disps}, (_, k) =>
+    SEG.split('').map((_, i) => rows.every(r => !r.exp || r.exp[k][i] === r.lit[k][i])));
   const disallowed = S.allowed ? [...new Set(S.comps.filter(c => isGate(c.type) && !S.allowed.includes(c.type)).map(c => c.type))] : [];
   return {rows, ok, cnt, unstable, segGood, disallowed};
 }
@@ -711,10 +769,10 @@ function exprMaker(idx) {
   }
   return node;
 }
-function buildExprs(idx) {
+function buildExprs(idx, k = dispSel) {
   const node = exprMaker(idx);
   return SEG.split('').map((_, i) => {
-    const w = idx.inMap.get('disp:' + i);
+    const w = idx.inMap.get(dispId(k) + ':' + i);
     return w ? node(w.from.c, w.from.p).h : null;
   });
 }
@@ -801,25 +859,26 @@ function renderComp(c, res, idx) {
     outLbl = i => `Output ${LETTERS[i]}`;
   } else if (c.type === 'DISP') {
     s += `<rect class="bezelbox" x="0" y="0" width="180" height="264" rx="10"/>`;
-    s += `<text class="dtitle" x="12" y="21">Display</text>`;
+    const k = dispIndex(c.id);
+    s += `<text class="dtitle" x="12" y="21">${dispName(k)}</text>`;
     s += `<text class="dsub" x="168" y="21" text-anchor="end">${S.disp === 'cc' ? 'CC · 1 = lit' : 'CA · 0 = lit'}</text>`;
     s += `<rect class="bezel" x="50" y="32" width="118" height="192" rx="6"/>`;
     for (let i = 0; i < 7; i++) {
       const y = 50 + i * 30;
       s += `<line class="stub" x1="-20" y1="${y}" x2="0" y2="${y}"/><text class="plbl" x="10" y="${y + 4.5}">${SEG[i]}</text>`;
     }
-    const v = curValue(), exp = expectedLit(v);
+    const v = curValue(), all = expectedAll(v), exp = all ? all[k] : null;
     SEGS.forEach(([pts, cx, cy], i) => {
       // dashed outline = should be lit but is off; yellow = lit but should be off
-      const lit = litOf(res.disp[i]);
+      const lit = litOf(res.disps[k][i]);
       let cls = lit ? ' on' : '', tip = `Segment ${SEG[i]}: ${lit ? 'lit' : 'off'}`;
       if (exp && exp[i] && !lit) { cls = ' miss'; tip += ' (should be lit)'; }
       if (exp && !exp[i] && lit) { cls = ' on extra'; tip += ' (should be off)'; }
       s += `<polygon class="seg${cls}" points="${pts}"><title>${tip}</title></polygon><text class="seglbl" x="${cx}" y="${cy + 3}" text-anchor="middle">${SEG[i]}</text>`;
     });
-    s += `<text class="dsub" x="12" y="249">Should show: <tspan class="dshould">${exp ? digitLabel(v) : 'X (don\'t care)'}</tspan></text>`;
+    s += `<text class="dsub" x="12" y="249">Should show: <tspan class="dshould">${exp ? (digitOf(v, k) === 'blank' ? 'blank' : digitChar(v, k)) : 'X (don\'t care)'}</tspan></text>`;
     if (exp) {
-      const good = exp.every((b, i) => b === litOf(res.disp[i]));
+      const good = exp.every((b, i) => b === litOf(res.disps[k][i]));
       s += `<text class="${good ? 'good' : 'nogood'}" x="168" y="250" text-anchor="end">${good ? '✓' : '✗'}</text>`;
     }
     inLbl = i => `Segment ${SEG[i]}`;
@@ -878,17 +937,17 @@ function render() {
   $('#emptyHint').hidden = S.comps.some(c => isGate(c.type) || c.type === 'CONST') || S.wires.length > 0;
   $('#taskBtn').textContent = '📋 ' + (S.task === 'free' ? 'Tasks' : taskOf().title);
   const sig = JSON.stringify([S.wires, S.comps.map(c => [c.id, c.type, c.n, c.value]), S.bits, S.mode, S.disp, S.inputs,
-                              S.task, S.allowed, tableView, tab, kmapSeg, [...revealed]]);
+                              S.task, S.allowed, tableView, tab, kmapSeg, [...revealed], dispSel, S.disps, S.lead]);
   if (sig !== lastAnaSig) { lastAnaSig = sig; renderAnalysis(idx); }
   $('#undo').disabled = !undoStack.length;
   $('#redo').disabled = !redoStack.length;
 }
 
 function renderStatus(res) {
-  const v = curValue(), exp = expectedLit(v);
-  let s = `<span>Input <span class="bits">${S.inputs.join('')}</span> = <b>${v}</b></span><span>→ should show <b>${exp ? digitLabel(v) : 'X'}</b></span>`;
+  const v = curValue(), exp = expectedAll(v);
+  let s = `<span>Input <span class="bits">${S.inputs.join('')}</span> = <b>${v}</b></span><span>→ should show <b>${numberLabel(v)}</b></span>`;
   if (exp) {
-    const good = exp.every((b, i) => b === litOf(res.disp[i]));
+    const good = exp.every((p, k) => p.every((b, i) => b === litOf(res.disps[k][i])));
     s += good ? '<span class="ok">✓ correct</span>'
               : '<span class="bad">✗ not yet</span><span class="hint" style="margin:0">dashed = missing · yellow = should be off</span>';
   } else s += '<span class="hint" style="margin:0">(don\'t care)</span>';
@@ -986,8 +1045,8 @@ function segCode(exp) {
   if (!exp) return '–';
   return '0x' + exp.reduce((s, lit, i) => s | (levelOf(lit) << i), 0).toString(16).toUpperCase().padStart(2, '0');
 }
-function mintermText(A, i) {
-  const mins = A.rows.filter(r => r.exp && levelOf(r.exp[i]) === 1).map(r => r.v);
+function mintermText(A, k, i) {
+  const mins = A.rows.filter(r => r.exp && levelOf(r.exp[k][i]) === 1).map(r => r.v);
   const dcs = A.rows.filter(r => !r.exp).map(r => r.v);
   const dc = dcs.length ? ` + d(${compressRanges(dcs)})` : '';
   return `<b>${SEG[i]}</b> = ` + (mins.length ? `Σm(${compressRanges(mins)})${dc}` : `0${dc ? ` &nbsp;<span class="hint">d(${compressRanges(dcs)})</span>` : ''}`);
@@ -996,8 +1055,12 @@ function mintermText(A, i) {
 function renderAnalysis(idx) {
   const A = analyze(idx);
   const t = taskOf();
-  const rk = JSON.stringify([S.bits, S.mode, S.disp, S.allowed]);
+  const rk = JSON.stringify([S.bits, S.mode, S.disp, S.allowed, S.disps, S.lead]);
   if (rk !== revealKey) { revealKey = rk; revealed.clear(); }
+  if (dispSel >= S.disps) dispSel = 0;
+  $('#dispPick').innerHTML = S.disps < 2 ? '' : `<span class="hint" style="margin:0 4px 0 0">Check display:</span>` +
+    Array.from({length: S.disps}, (_, j) => S.disps - 1 - j).map(k =>
+      `<button class="btn${k === dispSel ? ' active' : ''}${A.segGood[k].every(Boolean) ? ' g' : ''}" data-disp="${k}">${dispName(k)}</button>`).join('');
   // task card
   $('#taskCard').innerHTML = `<div class="taskcard"><div class="tk-top"><span class="tk-label">${S.task === 'free' ? 'Mode' : 'Task'}</span>
       <button class="btn" data-act="tasks">Change task</button></div>
@@ -1008,8 +1071,8 @@ function renderAnalysis(idx) {
   const gates = gateCount();
   const allOk = A.cnt > 0 && A.ok === A.cnt && !A.disallowed.length && !A.unstable;
   let sum = allOk
-    ? `<b class="stok">🎉 All ${A.cnt} digits correct!</b> You used ${gates} gate${gates === 1 ? '' : 's'}. Can you do it with fewer?`
-    : `<b>${A.ok} / ${A.cnt}</b> digits correct · <b>${A.segGood.filter(Boolean).length} / 7</b> segments done`;
+    ? `<b class="stok">🎉 All ${A.cnt} ${S.disps > 1 ? 'numbers' : 'digits'} correct!</b> You used ${gates} gate${gates === 1 ? '' : 's'}. Can you do it with fewer?`
+    : `<b>${A.ok} / ${A.cnt}</b> ${S.disps > 1 ? 'numbers' : 'digits'} correct · <b>${A.segGood.flat().filter(Boolean).length} / ${7 * S.disps}</b> segments done`;
   if (A.disallowed.length) sum += `<div class="stbad" style="margin-top:4px">⚠ This task only allows ${S.allowed.join(', ')}. Replace: ${A.disallowed.join(', ')}.</div>`;
   if (A.unstable) sum += `<div style="color:var(--warn);margin-top:4px">⚠ Some input values make the circuit oscillate (feedback loop).</div>`;
   sum += `<div class="bar"><i style="width:${A.cnt ? (100 * A.ok / A.cnt) : 0}%"></i></div>`;
@@ -1028,24 +1091,24 @@ function renderAnalysis(idx) {
 }
 
 function renderTableTab(A) {
-  const N = S.bits, cur = curValue();
+  const N = S.bits, cur = curValue(), k = dispSel;
   let body = '';
   for (const r of A.rows) {
     let cells = '';
     for (let i = 0; i < 7; i++) {
-      const lvl = r.lvl[i], mine = lvl === null ? '·' : lvl;
+      const lvl = r.lvl[k][i], mine = lvl === null ? '·' : lvl;
       if (!r.exp) { cells += `<td class="dc">${tableView === 'exp' ? 'X' : mine}</td>`; continue; }
-      const good = r.lit[i] === r.exp[i], el = levelOf(r.exp[i]);
+      const good = r.lit[k][i] === r.exp[k][i], el = levelOf(r.exp[k][i]);
       cells += `<td class="${good ? 'ok' : 'bad'}" title="${SEG[i]}: should be ${el}, your circuit gives ${mine}">${tableView === 'exp' ? el : mine}</td>`;
     }
     body += `<tr data-v="${r.v}"${r.v === cur ? ' class="cur"' : ''}><td class="num">${r.v}</td>${r.ins.map(b => `<td class="bit">${b}</td>`).join('')}` +
-            `<td class="dig">${digitLabel(r.v)}</td><td class="yours" title="What your circuit shows">${miniDigit(r.lit)}</td>${cells}` +
-            `<td class="code">${segCode(r.exp)}</td><td class="st ${r.good ? 'stok' : 'stbad'}">${r.exp ? (r.good ? '✓' : '✗') : ''}</td></tr>`;
+            `<td class="dig">${numberLabel(r.v)}</td><td class="yours" title="What your circuit shows"><span class="minis">${[...r.lit].reverse().map(l => miniDigit(l)).join('')}</span></td>${cells}` +
+            `<td class="code">${segCode(r.exp && r.exp[k])}</td><td class="st ${r.good ? 'stok' : 'stbad'}">${r.exp ? (r.good ? '✓' : '✗') : ''}</td></tr>`;
   }
   const head = `<thead><tr><th>#</th>${[...Array(N)].map((_, i) => `<th>${LETTERS[i]}</th>`).join('')}<th title="Digit it should show">Want</th><th title="What your circuit shows">Yours</th>` +
-               SEG.split('').map((s, i) => `<th class="segh${A.segGood[i] ? ' sgood' : ''}" data-kmap="${i}" title="Open the Karnaugh map for segment ${s}">${s}</th>`).join('') +
+               SEG.split('').map((s, i) => `<th class="segh${A.segGood[k][i] ? ' sgood' : ''}" data-kmap="${i}" title="Open the Karnaugh map for segment ${s}">${s}</th>`).join('') +
                '<th title="Segment code as one byte (bits g f e d c b a): what a microcontroller would output to drive the display directly">Code</th><th></th></tr></thead>';
-  return `<div class="tbhead"><span class="hint" style="margin:0">Cells show: </span><div class="segtoggle">
+  return `<div class="tbhead"><span class="hint" style="margin:0">${S.disps > 1 ? `Segments of <b>${dispName(k).toLowerCase()}</b> · ` : ''}Cells show: </span><div class="segtoggle">
       <button class="btn${tableView === 'exp' ? ' active' : ''}" data-tv="exp" title="What each segment pin should be">Expected</button>
       <button class="btn${tableView === 'mine' ? ' active' : ''}" data-tv="mine" title="What your circuit outputs">My circuit</button></div></div>
     <div class="tablewrap"><table class="tt">${head}<tbody>${body}</tbody></table></div>
@@ -1053,12 +1116,12 @@ function renderTableTab(A) {
       <span style="background:var(--bad);color:var(--bad-ink)">red</span> wrong,
       <span style="background:var(--dc)">X</span> don't care, · not connected. Click a row to set the inputs, or a segment letter to open its Karnaugh map.</p>
     <div class="card"><b>Minterms</b> <span class="hint">(input values where the pin must be 1, plus don't-cares)</span>
-      ${SEG.split('').map((_, i) => `<div class="mt">${mintermText(A, i)}</div>`).join('')}</div>`;
+      ${SEG.split('').map((_, i) => `<div class="mt">${mintermText(A, dispSel, i)}</div>`).join('')}</div>`;
 }
 
 function segPicker(A) {
   return `<div class="segpick"><span class="hint" style="margin:0 4px 0 0">Segment:</span>${SEG.split('').map((s, i) =>
-    `<button class="btn${i === kmapSeg ? ' active' : ''}${A.segGood[i] ? ' g' : ''}" data-seg="${i}">${s}</button>`).join('')}</div>`;
+    `<button class="btn${i === kmapSeg ? ' active' : ''}${A.segGood[dispSel][i] ? ' g' : ''}" data-seg="${i}">${s}</button>`).join('')}</div>`;
 }
 
 function renderKmapTab(A, idx) {
@@ -1066,7 +1129,7 @@ function renderKmapTab(A, idx) {
   let h = segPicker(A);
   if (N > 4) {
     return h + `<p class="hint">Karnaugh maps are shown for 1–4 bits. With ${N} bits, use the truth table and the minterm list below.</p>
-      <div class="card"><div class="mt">${mintermText(A, i)}</div></div>`;
+      <div class="card"><div class="mt">${mintermText(A, dispSel, i)}</div></div>`;
   }
   const rv = Math.floor(N / 2), cv = N - rv;
   const gray = k => k === 0 ? [0] : k === 1 ? [0, 1] : [0, 1, 3, 2];
@@ -1080,22 +1143,22 @@ function renderKmapTab(A, idx) {
       let cls, txt, tip;
       if (!row.exp) { cls = 'dc'; txt = 'X'; tip = 'don\'t care'; }
       else {
-        const el = levelOf(row.exp[i]);
-        txt = el; cls = row.lit[i] === row.exp[i] ? 'ok' : 'bad';
-        tip = `should be ${el}, your circuit gives ${row.lvl[i] === null ? 'nothing (not connected)' : row.lvl[i]}`;
+        const k = dispSel, el = levelOf(row.exp[k][i]);
+        txt = el; cls = row.lit[k][i] === row.exp[k][i] ? 'ok' : 'bad';
+        tip = `should be ${el}, your circuit gives ${row.lvl[k][i] === null ? 'nothing (not connected)' : row.lvl[k][i]}`;
       }
       h += `<td class="${cls}${v === cur ? ' cur' : ''}" data-v="${v}" title="Input ${v}: ${tip}"><b>${txt}</b><small>${v}</small></td>`;
     }
     h += '</tr>';
   }
   h += '</table></div>';
-  const ex = buildExprs(idx)[i];
-  h += `<div class="card"><div class="mt">${mintermText(A, i)}</div>
+  const ex = buildExprs(idx, dispSel)[i];
+  h += `<div class="card"><div class="mt">${mintermText(A, dispSel, i)}</div>
       <div style="margin-top:6px">Your circuit: <span class="math"><b>${SEG[i]}</b> = ${ex || '<span class="hint">not connected</span>'}</span></div></div>
     <p class="hint">The value shown is what pin <b>${SEG[i]}</b> must be. Circle groups of 1s in rectangles of 1, 2, 4 or 8 cells (the map wraps around its edges). X cells may be included if that makes a group bigger. Each group becomes one AND term, and the groups are ORed together. Colours show whether your circuit already matches.</p>`;
   if (!NOSOL) {
-    if (revealed.has(i)) {
-      const sol = solveAll(A)[i];
+    if (revealed.has(dispSel + ':' + i)) {
+      const sol = solveDisplay(A, dispSel)[i];
       h += `<div class="card"><b>Solution groups</b> <span class="hint">(${sol.pos ? 'groups of 0s' : 'groups of 1s'} — hover or tap a term to see its cells)</span>
         <div class="chips">${sol.terms.length
           ? sol.terms.map(t => `<span class="chip" data-cells="${termCells(t).join(',')}"><span class="math">${termHtml(t, sol.pos)}</span></span>`).join('')
@@ -1109,11 +1172,11 @@ function renderKmapTab(A, idx) {
 }
 
 function renderExprTab(A, idx) {
-  const ex = buildExprs(idx);
-  return `<p class="hint">The formula your wiring computes for each display pin. A bar over something means NOT.</p>` +
-    SEG.split('').map((s, i) => `<div class="exrow"><span class="let ${A.segGood[i] ? 'g' : 'b'}">${s}</span>` +
+  const ex = buildExprs(idx, dispSel), good = A.segGood[dispSel];
+  return `<p class="hint">The formula your wiring computes for each pin of the ${S.disps > 1 ? `<b>${dispName(dispSel).toLowerCase()}</b> ` : ''}display. A bar over something means NOT.</p>` +
+    SEG.split('').map((s, i) => `<div class="exrow"><span class="let ${good[i] ? 'g' : 'b'}">${s}</span>` +
       `<span class="math">${ex[i] || '<span class="hint" style="font-family:inherit;font-size:13px">not connected</span>'}</span>` +
-      `<span class="mk ${A.segGood[i] ? 'stok' : 'stbad'}">${A.segGood[i] ? '✓' : '✗'}</span></div>`).join('');
+      `<span class="mk ${good[i] ? 'stok' : 'stbad'}">${good[i] ? '✓' : '✗'}</span></div>`).join('');
 }
 
 // ---------- solution suggestions ----------
@@ -1126,9 +1189,11 @@ function minimize(N, ones, dcs) {
   const primes = [];
   while (cur.size) {
     const arr = [...cur.values()], next = new Map(), used = new Set();
-    for (let i = 0; i < arr.length; i++) for (let j = i + 1; j < arr.length; j++) {
-      const a = arr[i], b = arr[j], d = a.v ^ b.v;
-      if (a.m !== b.m || !d || (d & (d - 1))) continue;
+    const groups = new Map();   // only terms with the same eliminated bits can merge
+    for (const a of arr) { if (!groups.has(a.m)) groups.set(a.m, []); groups.get(a.m).push(a); }
+    for (const g of groups.values()) for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) {
+      const a = g[i], b = g[j], d = a.v ^ b.v;
+      if (!d || (d & (d - 1))) continue;
       const v = a.v & ~d, m = a.m | d;
       if (!next.has(v + ':' + m)) next.set(v + ':' + m, {v, m});
       used.add(a); used.add(b);
@@ -1139,17 +1204,19 @@ function minimize(N, ones, dcs) {
   const P = primes.map(p => ({v: p.v, m: p.m, lits: N - popcount(p.m), cov: new Set(ones.filter(x => (x & ~p.m) === p.v))}))
                   .filter(p => p.cov.size);
   // exact cover search (fewest terms, then fewest literals), bounded
+  const coverers = new Map(ones.map(x => [x, []]));
+  P.forEach(p => p.cov.forEach(x => coverers.get(x).push(p)));
   let best = null, bestCost = Infinity, steps = 0;
   (function search(unc, sel, cost) {
-    if (++steps > 100000 || cost + (unc.length ? 100 : 0) >= bestCost) return;
+    if (++steps > 20000 || cost + (unc.length ? 100 : 0) >= bestCost) return;
     if (!unc.length) { best = sel.slice(); bestCost = cost; return; }
     let opts = null;
     for (const x of unc) {
-      const o = P.filter(p => p.cov.has(x));
+      const o = coverers.get(x);
       if (!opts || o.length < opts.length) opts = o;
       if (opts.length === 1) break;
     }
-    opts.sort((a, b) => b.cov.size - a.cov.size || a.lits - b.lits);
+    opts = opts.slice().sort((a, b) => b.cov.size - a.cov.size || a.lits - b.lits);
     for (const p of opts) { sel.push(p); search(unc.filter(x => !p.cov.has(x)), sel, cost + 100 + p.lits); sel.pop(); }
   })(ones.slice(), [], 0);
   return best.map(p => ({v: p.v, m: p.m})).sort((a, b) => popcount(b.m) - popcount(a.m) || a.v - b.v);
@@ -1159,14 +1226,24 @@ function solutionFamily() {
   if (S.allowed && S.allowed.length === 1 && S.allowed[0] === 'NOR') return 'nor';
   return 'std';
 }
-// per segment: minimal SOP of the pin level (or POS via the 0s for NOR-only tasks)
-function solveAll(A) {
+// per segment of display k: minimal SOP of the pin level (or POS via the 0s for NOR-only tasks)
+function solveDisplay(A, k) {
+  const key = JSON.stringify([S.bits, S.mode, S.disp, S.lead, S.disps, S.allowed, k]);
+  if (solCache.has(key)) return solCache.get(key);
   const pos = solutionFamily() === 'nor';
-  return SEG.split('').map((_, i) => {
+  const sols = SEG.split('').map((_, i) => {
     const ones = [], zeros = [], dcs = [];
-    for (const r of A.rows) { if (!r.exp) dcs.push(r.v); else (levelOf(r.exp[i]) ? ones : zeros).push(r.v); }
+    for (const r of A.rows) { if (!r.exp) dcs.push(r.v); else (levelOf(r.exp[k][i]) ? ones : zeros).push(r.v); }
     return {terms: minimize(S.bits, pos ? zeros : ones, dcs), pos};
   });
+  solCache.set(key, sols);
+  return sols;
+}
+// all displays in order (display k, segment i is at index k*7+i)
+function solveAllDisplays(A) {
+  const out = [];
+  for (let k = 0; k < S.disps; k++) out.push(...solveDisplay(A, k));
+  return out;
 }
 function termCells(t) {
   const out = [];
@@ -1255,11 +1332,12 @@ function collectGates(roots) {
   return gates;
 }
 function buildSolution() {
-  const roots = solutionDag(solveAll(analyze(buildIndex())));
+  const n = S.disps;
+  const roots = solutionDag(solveAllDisplays(analyze(buildIndex())));   // root k*7+i feeds display k, pin i
   const gates = collectGates(roots);
-  // order each column by the segment the gate feeds, to keep wires tidy
+  // order each column by the segment the gate feeds (top display first), to keep wires tidy
   gates.forEach(g => { g.rank = Infinity; });
-  roots.forEach((r, i) => { if (isGateNode(r)) r.rank = Math.min(r.rank, i); });
+  roots.forEach((r, j) => { if (isGateNode(r)) r.rank = Math.min(r.rank, (n - 1 - Math.floor(j / 7)) * 7 + j % 7); });
   [...gates].sort((a, b) => b.level - a.level)
     .forEach(g => g.args.forEach((a, k) => { if (isGateNode(a)) a.rank = Math.min(a.rank, g.rank + k * 0.01); }));
   const maxL = Math.max(0, ...gates.map(g => g.level));
@@ -1267,7 +1345,7 @@ function buildSolution() {
   gates.forEach(g => cols[g.level].push(g));
   const hOf = g => g.op === 'NOT' ? 40 : Math.max(40, g.args.length * 20);
   const colH = cols.map(c => c.reduce((s, g) => s + hOf(g) + 30, 0));
-  const ctrlH = 50 + S.bits * 40, maxH = Math.max(ctrlH, 264, ...colH);
+  const ctrlH = 50 + S.bits * 40, stackH = n * 264 + (n - 1) * 40, maxH = Math.max(ctrlH, stackH, ...colH);
   const X0 = 270, DX = 170, TOP = 40;
   const idOf = new Map(), comps = [];
   cols.forEach((col, L) => {
@@ -1281,13 +1359,13 @@ function buildSolution() {
       y += hOf(g) + 30;
     }
   });
-  const dispX = maxL ? X0 + (maxL - 1) * DX + 240 : 420, dispY = TOP + snap((maxH - 264) / 2);
+  const dispX = maxL ? X0 + (maxL - 1) * DX + 240 : 420, dispY = TOP + snap((maxH - stackH) / 2);
   const constIds = {};
   const srcOf = n => {
     if (n.op === 'var') return {c: 'ctrl', p: n.val};
     if (n.op === 'const') {
       if (!constIds[n.val]) {
-        const c = {id: uid(), type: 'CONST', value: n.val, x: dispX - 130, y: dispY + 290 + Object.keys(constIds).length * 50};
+        const c = {id: uid(), type: 'CONST', value: n.val, x: dispX - 130, y: TOP + maxH + 30 + Object.keys(constIds).length * 50};
         comps.push(c);
         constIds[n.val] = c.id;
       }
@@ -1297,29 +1375,30 @@ function buildSolution() {
   };
   const wires = [];
   for (const g of gates) g.args.forEach((a, k) => wires.push({id: uid(), from: srcOf(a), to: {c: idOf.get(g.id), p: k}}));
-  roots.forEach((r, i) => wires.push({id: uid(), from: srcOf(r), to: {c: 'disp', p: i}}));
+  roots.forEach((r, j) => wires.push({id: uid(), from: srcOf(r), to: {c: dispId(Math.floor(j / 7)), p: j % 7}}));
   stopPlay();
   pushUndo();
-  const ctrl = comp('ctrl'), disp = comp('disp');
+  const ctrl = comp('ctrl'), disps = S.comps.filter(c => c.type === 'DISP');
   ctrl.x = 40; ctrl.y = TOP + snap((maxH - ctrlH) / 2);
-  disp.x = dispX; disp.y = dispY;
-  S.comps = [ctrl, disp, ...comps];
+  disps.forEach(d => { d.x = dispX; d.y = dispY + (n - 1 - dispIndex(d.id)) * 304; });   // highest digit on top
+  S.comps = [ctrl, ...disps, ...comps];
   S.wires = wires;
   lastAllOk = null;
   clearSel(); commit(); fit();
   toast(`Built a solution with ${gates.length} gate${gates.length === 1 ? '' : 's'}. Can you beat it?`);
 }
 function renderSolutionTab(A) {
-  const sols = solveAll(A), fam = solutionFamily();
-  const gates = collectGates(solutionDag(sols));
+  const sols = solveDisplay(A, dispSel), fam = solutionFamily();
+  const gates = collectGates(solutionDag(solveAllDisplays(A)));
   const counts = {};
   gates.forEach(g => { counts[g.op] = (counts[g.op] || 0) + 1; });
   const countTxt = GATE_TYPES.filter(t => counts[t]).map(t => `${counts[t]} ${t}`).join(', ');
   let h = `<div class="card">💡 <b>Try it yourself first!</b> Reveal one segment at a time, and use the Karnaugh map to see <i>why</i> the answer works.</div>`;
+  if (S.disps > 1) h += `<p class="hint">Showing the segments of the <b>${dispName(dispSel).toLowerCase()}</b> display. Pick another display above the tabs.</p>`;
   if (fam === 'nor') h += `<p class="hint">NOR only: these answers are written as a <b>product of sums</b> (groups of 0s in the K-map). That maps directly onto NOR → NOR. NOT A is a NOR gate with both inputs on A.</p>`;
   else if (fam === 'nand') h += `<p class="hint">NAND only: a <b>sum of products</b> maps directly onto NAND → NAND. NOT A is a NAND gate with both inputs on A.</p>`;
   h += SEG.split('').map((s, i) => `<div class="exrow sol"><span class="let">${s}</span>` +
-    (revealed.has(i)
+    (revealed.has(dispSel + ':' + i)
       ? `<span class="math">${solHtml(sols[i])}</span><button class="btn sm" data-kmap="${i}" title="See the groups in the Karnaugh map">K-map</button>`
       : `<span class="hidden-sol">• • •</span><button class="btn sm" data-reveal="${i}">Show</button>`) + `</div>`).join('');
   h += `<div class="row"><button class="btn" data-act="revealall">Show all</button><button class="btn" data-act="hideall">Hide all</button></div>`;
@@ -1435,12 +1514,33 @@ function setValue(v) {
   S.inputs = toInputs(((v % rows) + rows) % rows);
   commit();
 }
-function applySettings(bits, mode, disp) {
+function applySettings(bits, mode, disp, disps = 1, lead = 'blank') {
   S.bits = bits;
   S.mode = mode;
   S.disp = disp;
+  S.lead = lead;
+  setDisplays(disps);
   S.inputs = Array(bits).fill(0);
   S.wires = S.wires.filter(w => !(w.from.c === 'ctrl' && w.from.p >= bits));
+}
+// add displays for higher digits on the left (existing ones move right), or remove the highest ones
+function setDisplays(n) {
+  n = clamp(n, 1, 4);
+  const m = S.disps;
+  if (n > m) {
+    const existing = S.comps.filter(c => c.type === 'DISP');
+    const left = existing.reduce((a, c) => (c.x < a.x ? c : a), existing[0]);
+    const L = left.x, Y = left.y;
+    existing.forEach(c => { c.x += (n - m) * 230; });
+    for (let k = m; k < n; k++) S.comps.push({id: dispId(k), type: 'DISP', x: L + (n - 1 - k) * 230, y: Y});
+  } else if (n < m) {
+    const gone = new Set();
+    for (let k = n; k < m; k++) gone.add(dispId(k));
+    S.comps = S.comps.filter(c => !gone.has(c.id));
+    S.wires = S.wires.filter(w => !gone.has(w.to.c));
+    selC = new Set([...selC].filter(id => !gone.has(id)));
+  }
+  S.disps = n;
 }
 function manualSetting(fn) {
   stopPlay();
@@ -1703,10 +1803,10 @@ $('#tabBody').addEventListener('click', e => {
   const d = el.dataset;
   if (d.tv) { tableView = d.tv; render(); }
   else if (d.seg !== undefined) { kmapSeg = +d.seg; render(); }
-  else if (d.reveal !== undefined) { revealed.add(+d.reveal); render(); }
+  else if (d.reveal !== undefined) { revealed.add(dispSel + ':' + d.reveal); render(); }
   else if (d.kmap !== undefined) { kmapSeg = +d.kmap; tab = 'kmap'; render(); }
   else if (d.cells !== undefined) highlightCells(d.cells);
-  else if (d.act === 'revealall') { SEG.split('').forEach((_, i) => revealed.add(i)); render(); }
+  else if (d.act === 'revealall') { SEG.split('').forEach((_, i) => revealed.add(dispSel + ':' + i)); render(); }
   else if (d.act === 'hideall') { revealed.clear(); render(); }
   else if (d.act === 'buildsol') {
     if (S.comps.some(c => !fixed(c)) && !confirm('Replace your board with the suggested solution? (You can get your work back with Undo.)')) return;
@@ -1729,6 +1829,10 @@ $('#summary').addEventListener('click', e => {
   stopPlay();
   setValue(bad.find(v => v > cur) ?? bad[0]);
 });
+$('#dispPick').addEventListener('click', e => {
+  const b = e.target.closest('[data-disp]');
+  if (b) { dispSel = +b.dataset.disp; render(); }
+});
 $('#taskCard').addEventListener('click', e => {
   const b = e.target.closest('[data-act]');
   if (!b) return;
@@ -1738,10 +1842,17 @@ $('#taskCard').addEventListener('click', e => {
 
 function syncControls() {
   $('#bits').value = S.bits;
+  $('#disps').value = S.disps;
+  $('#lead').value = S.lead;
+  $('#leadLbl').hidden = S.disps < 2;
+  const mo = $('#mode').options;
+  ['hex', 'dec', 'decblank'].forEach((m, i) => { mo[i].text = modeLabel(m, S.disps); });
   $('#mode').value = S.mode;
   $('#disptype').value = S.disp;
 }
-$('#bits').addEventListener('change', e => manualSetting(() => applySettings(+e.target.value, S.mode, S.disp)));
+$('#bits').addEventListener('change', e => manualSetting(() => applySettings(+e.target.value, S.mode, S.disp, S.disps, S.lead)));
+$('#disps').addEventListener('change', e => { manualSetting(() => setDisplays(+e.target.value)); syncControls(); fit(); });
+$('#lead').addEventListener('change', e => manualSetting(() => { S.lead = e.target.value; }));
 $('#mode').addEventListener('change', e => manualSetting(() => { S.mode = e.target.value; }));
 $('#disptype').addEventListener('change', e => manualSetting(() => { S.disp = e.target.value; }));
 
@@ -1814,7 +1925,7 @@ $('#image').addEventListener('click', () => {
   const vars = Object.entries(LIGHT_VARS).map(([k, v]) => `${k}:${v}`).join(';');
   const A = analyze(buildIndex());
   const t = taskOf();
-  const title = `${S.task === 'free' ? '7-segment circuit' : t.title} — ${S.bits} bit${S.bits > 1 ? 's' : ''}, ${MODE_LABEL[S.mode]}, ${S.disp === 'cc' ? 'common cathode' : 'common anode'}`;
+  const title = `${S.task === 'free' ? '7-segment circuit' : t.title} — ${S.bits} bit${S.bits > 1 ? 's' : ''}, ${S.disps > 1 ? S.disps + ' displays, ' : ''}${modeLabel(S.mode, S.disps)},${S.disp === 'cc' ? 'common cathode' : 'common anode'}`;
   const sub = `${A.ok} / ${A.cnt} digits correct · ${gateCount()} gates`;
   const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${w * 2}" height="${h * 2}" viewBox="${x0} ${y0} ${w} ${h}">` +
     `<style>svg{${vars};font-family:"Segoe UI",Arial,sans-serif}${$('#svgcss').textContent}</style>` +
@@ -1841,7 +1952,8 @@ $('#image').addEventListener('click', () => {
 // ---------- tasks ----------
 function openTasks() {
   $('#taskList').innerHTML = TASKS.map(t => {
-    const tags = t.set ? [`${t.set.bits} bit${t.set.bits > 1 ? 's' : ''}`, MODE_LABEL[t.set.mode], t.set.disp === 'ca' ? 'common anode' : null,
+    const tags = t.set ? [`${t.set.bits} bit${t.set.bits > 1 ? 's' : ''}`, t.set.disps > 1 ? `${t.set.disps} displays` : null,
+                          modeLabel(t.set.mode, t.set.disps || 1), t.set.disp === 'ca' ? 'common anode' : null,
                           t.set.allowed ? t.set.allowed.join('/') + ' only' : null].filter(Boolean) : ['any settings'];
     return `<button class="taskitem${t.id === S.task ? ' cur' : ''}" data-task="${t.id}"><b>${t.title}</b><span>${t.desc}</span>` +
            `<div class="tags">${tags.map(x => `<em>${x}</em>`).join('')}</div></button>`;
@@ -1858,7 +1970,7 @@ $('#taskList').addEventListener('click', e => {
   pushUndo();
   S.task = t.id;
   S.allowed = t.set && t.set.allowed ? [...t.set.allowed] : null;
-  if (t.set) applySettings(t.set.bits, t.set.mode, t.set.disp);
+  if (t.set) applySettings(t.set.bits, t.set.mode, t.set.disp, t.set.disps || 1, t.set.lead || 'blank');
   if (clear) { S.comps = S.comps.filter(fixed); S.wires = []; }
   lastAllOk = null;
   clearSel(); syncControls(); commit();

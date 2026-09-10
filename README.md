@@ -25,7 +25,8 @@ code-signed, so Windows SmartScreen may show "Windows protected your PC" the fir
 
 ## Features
 
-- **Controller** with 1–6 outputs (bits). A is the most significant bit.
+- **Controller** with 1–8 outputs (bits). A is the most significant bit.
+- **1–4 displays** for bigger numbers (e.g. 0–15 in decimal or 00–FF in hex), with blank or visible leading zeros.
 - **Gates** with 2–4 inputs, constants, and text notes. Drag and drop, then wire pin to pin.
 - **Realistic LED display** with inputs a–g, as a common cathode or common anode display.
 - **Tasks**: a warm-up, 0–3, 0–7, a BCD decoder, a hex decoder, common anode, and NAND-only / NOR-only challenges.
