@@ -1,0 +1,2 @@
+# Built Windows app. Rebuild with app\build.ps1 (publish it as a GitHub Release instead of committing it)
+dist/

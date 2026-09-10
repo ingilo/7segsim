@@ -1,0 +1,1775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>7-Segment Logic Lab</title>
+<style>
+:root{
+  --bg:#eef1f6; --panel:#ffffff; --panel-2:#f7f9fc; --ink:#1e293b; --muted:#64748b; --line:#dde3ec;
+  --accent:#2563eb; --accent-soft:#e0eaff;
+  --grid:#cfd7e3; --canvas:#f8fafc;
+  --gate-fill:#ffffff; --gate-stroke:#334155; --box:#f1f5f9;
+  --on:#16a34a; --off:#9aa6b8;
+  --seg-on:#ff3b30; --seg-off-mini:#ecdede;
+  --ok:#dcfce7; --ok-ink:#166534; --bad:#fee2e2; --bad-ink:#b91c1c; --dc:#f1f5f9; --warn:#b45309;
+  --shadow:0 1px 2px rgba(15,23,42,.06),0 4px 14px rgba(15,23,42,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0b1220; --panel:#111a2b; --panel-2:#0f1726; --ink:#e2e8f0; --muted:#94a3b8; --line:#243148;
+    --accent:#60a5fa; --accent-soft:#1b3356;
+    --grid:#1e2a3e; --canvas:#0a111e;
+    --gate-fill:#162238; --gate-stroke:#cbd5e1; --box:#162238;
+    --on:#4ade80; --off:#4d5b74;
+    --seg-off-mini:#2c1d24;
+    --ok:#12321d; --ok-ink:#86efac; --bad:#3d1417; --bad-ink:#fca5a5; --dc:#162034; --warn:#fbbf24;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.25);
+  }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;overflow:hidden}
+button{font:inherit}
+
+/* ---------- top bar ---------- */
+header.top{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line);box-shadow:var(--shadow);z-index:5}
+.brand{display:flex;align-items:center;gap:9px;font-weight:750;font-size:16px;margin-right:6px;white-space:nowrap;letter-spacing:-.01em}
+.brand .logo{background:#141414;border-radius:6px;padding:4px 6px;display:flex;box-shadow:inset 0 0 0 1px #000}
+header label{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px;font-weight:600}
+select{font:inherit;font-size:13px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:4px 6px;cursor:pointer}
+select:hover{border-color:var(--accent)}
+.group{display:flex;gap:4px;align-items:center}
+.sep{width:1px;height:26px;background:var(--line)}
+.spacer{flex:1}
+.btn{font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:5px 10px;border-radius:7px;cursor:pointer;white-space:nowrap;transition:border-color .12s,background .12s}
+.btn:hover{border-color:var(--accent)}
+.btn:disabled{opacity:.4;cursor:default;border-color:var(--line)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.btn.danger:hover{border-color:var(--bad-ink);color:var(--bad-ink)}
+.btn.sm{padding:1px 9px;font-weight:700}
+.btn.task{font-weight:650;max-width:260px;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- layout ---------- */
+.main{flex:1;display:flex;min-height:0}
+aside{background:var(--panel);overflow:auto;padding:12px 14px}
+aside.left{width:214px;border-right:1px solid var(--line);flex-shrink:0}
+aside.right{width:450px;border-left:1px solid var(--line);flex-shrink:0;padding-top:14px}
+aside.right.collapsed{display:none}
+aside h3{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:16px 0 8px}
+aside h3:first-child{margin-top:0}
+.hint{color:var(--muted);font-size:12.5px;margin:6px 0}
+.palette{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.pal{border:1px solid var(--line);border-radius:9px;padding:5px 2px 3px;text-align:center;cursor:grab;user-select:none;touch-action:none;background:var(--panel-2);transition:border-color .12s,background .12s,transform .12s}
+.pal:hover{border-color:var(--accent);background:var(--accent-soft);transform:translateY(-1px)}
+.pal.off{opacity:.3;cursor:not-allowed;transform:none;background:var(--panel-2);border-color:var(--line)}
+.pal svg{display:block;margin:0 auto;overflow:visible}
+.pal b{font-size:11px;display:block;margin-top:1px;letter-spacing:.02em}
+#selpanel p{margin:4px 0}
+.row{display:flex;align-items:center;gap:8px;margin:8px 0;flex-wrap:wrap}
+#stats{font-size:13px}
+#stats .st-row{display:flex;justify-content:space-between;padding:1px 0}
+#stats .tot{font-weight:700;border-top:1px solid var(--line);margin-top:4px;padding-top:4px}
+#stage{flex:1;position:relative;min-width:0}
+#svg{width:100%;height:100%;display:block;background:var(--canvas);touch-action:none}
+#svg.panning{cursor:grabbing}
+.overlay{position:absolute;display:flex;gap:6px;align-items:center}
+#status{left:12px;bottom:12px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:7px 12px;font-size:13px;max-width:calc(100% - 210px);box-shadow:var(--shadow);flex-wrap:wrap}
+#status .ok{color:var(--ok-ink);font-weight:700}
+#status .bad{color:var(--bad-ink);font-weight:700}
+#status .warn{color:var(--warn);font-weight:700}
+#status .bits{font-family:ui-monospace,Consolas,monospace;font-weight:700;letter-spacing:.08em}
+#zoom{right:12px;bottom:12px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:4px;box-shadow:var(--shadow)}
+#zoom .btn{border-color:transparent;padding:3px 9px}
+#zoom .btn:hover{border-color:var(--accent)}
+#zoomPct{font-size:12px;color:var(--muted);min-width:40px;text-align:center}
+#emptyHint{left:50%;top:18px;transform:translateX(-50%);background:var(--panel);border:1px dashed var(--accent);color:var(--muted);border-radius:10px;padding:8px 14px;font-size:13px;pointer-events:none;box-shadow:var(--shadow)}
+#ghost{position:fixed;pointer-events:none;z-index:50;opacity:.85;display:none}
+#toast{position:fixed;left:50%;top:70px;transform:translate(-50%,-20px);background:var(--panel);border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.18);border-radius:12px;padding:10px 18px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:60}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* ---------- right panel ---------- */
+.taskcard{background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:12px;padding:10px 12px}
+.taskcard .tk-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.taskcard .tk-label{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--accent);font-weight:700}
+.taskcard h4{margin:2px 0 4px;font-size:15px}
+.taskcard p{margin:0;font-size:13px}
+.taskcard .row{margin:8px 0 0}
+#summary{margin:12px 0 4px;font-size:13.5px}
+.bar{height:8px;background:var(--dc);border-radius:4px;overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;background:var(--on);transition:width .25s}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:12px 0 10px}
+.tab{padding:7px 11px;border:none;background:none;border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;color:var(--muted);font-weight:650;font-size:13px}
+.tab:hover{color:var(--ink)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tbhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px}
+.segtoggle{display:flex}
+.segtoggle .btn{border-radius:0;padding:3px 9px;font-size:12px}
+.segtoggle .btn:first-child{border-radius:7px 0 0 7px}
+.segtoggle .btn:last-child{border-radius:0 7px 7px 0;margin-left:-1px}
+.tablewrap{overflow-x:auto}
+table.tt{border-collapse:collapse;font:12px ui-monospace,Consolas,Menlo,monospace;width:100%}
+.tt th,.tt td{padding:3px 4px;text-align:center;border-bottom:1px solid var(--line)}
+.tt th{position:sticky;top:-14px;background:var(--panel);z-index:1;color:var(--muted)}
+.tt th.sgood{color:var(--ok-ink)}
+.tt th.sgood::after{content:"✓";font-size:10px;vertical-align:super}
+.tt td.bit{font-weight:700}
+.tt td.num{color:var(--muted)}
+.tt td.dig{font-weight:800;font-size:13px}
+.tt td.ok{background:var(--ok);color:var(--ok-ink)}
+.tt td.bad{background:var(--bad);color:var(--bad-ink);font-weight:800}
+.tt td.dc{background:var(--dc);color:var(--muted)}
+.tt td.st{font-weight:800}
+.tt td.yours{padding:1px 4px}
+.tt tbody tr{cursor:pointer}
+.tt tbody tr:hover td.num{color:var(--accent)}
+.tt tr.cur td{border-top:2px solid var(--accent);border-bottom:2px solid var(--accent)}
+.tt tr.cur td.num,.tt tr.cur td.bit,.tt tr.cur td.dig,.tt tr.cur td.st,.tt tr.cur td.yours{background:var(--accent-soft)}
+.stok{color:var(--ok-ink)} .stbad{color:var(--bad-ink)}
+.mini{display:block;margin:auto}
+.mini polygon{fill:var(--seg-off-mini)}
+.mini polygon.on{fill:var(--seg-on)}
+.legend{font-size:12px;color:var(--muted)}
+.legend span{display:inline-block;padding:0 5px;border-radius:3px;margin-right:2px}
+.segpick{display:flex;gap:4px;margin:0 0 12px;flex-wrap:wrap;align-items:center}
+.segpick .btn{font-family:ui-monospace,Consolas,monospace;font-weight:800;min-width:34px;padding:4px 0}
+.segpick .btn.g{color:var(--ok-ink)}
+.segpick .btn.g::after{content:"✓";font-size:9px;vertical-align:super}
+.kmapwrap{display:flex;justify-content:center;margin:6px 0 10px}
+table.kmap{border-collapse:separate;border-spacing:3px;font-family:ui-monospace,Consolas,monospace}
+.kmap th{font-size:12px;color:var(--muted);font-weight:700;padding:2px 6px}
+.kmap th.corner{font-size:11px;white-space:nowrap}
+.kmap td{width:52px;height:46px;text-align:center;border-radius:8px;position:relative;cursor:pointer;font-size:18px;border:2px solid transparent}
+.kmap td b{font-weight:800}
+.kmap td small{position:absolute;right:5px;bottom:2px;font-size:9.5px;opacity:.6;font-weight:600}
+.kmap td.ok{background:var(--ok);color:var(--ok-ink)}
+.kmap td.bad{background:var(--bad);color:var(--bad-ink)}
+.kmap td.dc{background:var(--dc);color:var(--muted)}
+.kmap td.cur{border-color:var(--accent)}
+.kmap td:hover{filter:brightness(.96)}
+.math{font-family:"Cambria Math","STIX Two Math","Latin Modern Math","Times New Roman",serif;font-size:17px}
+.math i{font-style:italic}
+.ov{display:inline-block;border-top:1.4px solid currentColor;padding-top:1px;line-height:1.05;margin:0 1px}
+.exrow{display:flex;align-items:baseline;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;margin:6px 0;background:var(--panel-2)}
+.exrow .let{font:800 15px ui-monospace,Consolas,monospace;min-width:14px}
+.exrow .let.g{color:var(--ok-ink)} .exrow .let.b{color:var(--bad-ink)}
+.exrow .math{flex:1;word-break:break-word}
+.exrow .mk{font-weight:800}
+.card{border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--panel-2);margin:10px 0;font-size:12.5px}
+.card .mt{font-family:ui-monospace,Consolas,monospace;margin:3px 0;word-break:break-word}
+.exrow.sol{align-items:center}
+.hidden-sol{flex:1;color:var(--muted);letter-spacing:.35em}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chip{border:1px solid var(--line);border-radius:20px;padding:1px 12px;background:var(--panel);cursor:pointer}
+.chip .math{font-size:15px}
+.chip:hover,.chip.on{border-color:var(--accent);background:var(--accent-soft)}
+.kmap td.hl{box-shadow:inset 0 0 0 3px var(--accent);filter:saturate(1.4)}
+
+/* ---------- dialogs ---------- */
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);max-width:720px;width:calc(100% - 40px);padding:22px 26px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+dialog::backdrop{background:rgba(15,23,42,.5)}
+dialog h2{margin-top:0}
+dialog h4{margin:16px 0 4px}
+dialog li{margin:3px 0}
+kbd{font:12px ui-monospace,Consolas,monospace;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;background:var(--panel-2)}
+.tasklist{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+.taskitem{text-align:left;border:1px solid var(--line);border-radius:12px;background:var(--panel-2);padding:10px 12px;cursor:pointer;color:var(--ink);transition:border-color .12s,transform .12s}
+.taskitem:hover{border-color:var(--accent);transform:translateY(-1px)}
+.taskitem.cur{border-color:var(--accent);background:var(--accent-soft)}
+.taskitem b{display:block;font-size:14px;margin-bottom:2px}
+.taskitem span{font-size:12.5px;color:var(--muted)}
+.taskitem .tags{margin-top:6px;display:flex;gap:4px;flex-wrap:wrap}
+.taskitem .tags em{font-style:normal;font-size:11px;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:0 7px;color:var(--muted)}
+@media (max-width:1100px){ aside.right{width:380px} }
+</style>
+<style id="svgcss">
+svg text{pointer-events:none;user-select:none}
+.gridbg{fill:url(#gridpat)}
+.gdot{fill:var(--grid)}
+.wire{fill:none;stroke-width:2.6;stroke-linecap:round;pointer-events:none}
+.wire.on{stroke:var(--on)}
+.wire.off{stroke:var(--off)}
+.wg:hover .wire{stroke-width:4}
+.wire.temp{stroke:var(--accent);stroke-dasharray:6 4}
+.wire-sel{fill:none;stroke:var(--accent);stroke-width:10;opacity:.28;pointer-events:none}
+.wire-hit{fill:none;stroke:transparent;stroke-width:12;cursor:pointer}
+.comp{cursor:grab}
+.hitbox{fill:transparent}
+.body{fill:var(--gate-fill);stroke:var(--gate-stroke);stroke-width:2;stroke-linejoin:round}
+.stub{stroke:var(--gate-stroke);stroke-width:2;fill:none}
+.comp.sel .body,.comp.sel .box,.comp.sel .note{stroke:var(--accent);stroke-width:3}
+.comp.sel .chip,.comp.sel .bezelbox{stroke:var(--accent);stroke-width:3.5}
+.glbl{font-size:9.5px;font-weight:700;fill:var(--muted);letter-spacing:.03em}
+.box{fill:var(--box);stroke:var(--gate-stroke);stroke-width:2}
+.cval{font-size:18px;font-weight:800;fill:var(--ink)}
+.chip{fill:#1f2937;stroke:#0b1220;stroke-width:2}
+.chiptxt{fill:#f1f5f9;font-size:13px;font-weight:700}
+.chipsub{fill:#94a3b8;font-size:11px}
+.chipval{fill:#fff;font-size:20px;font-weight:800}
+.chipnotch{fill:#111827}
+.bezelbox{fill:#262626;stroke:#0a0a0a;stroke-width:2}
+.bezel{fill:#0d0d0d}
+.plbl{fill:#d4d4d4;font-size:13px;font-weight:700;font-family:ui-monospace,Consolas,monospace}
+.dtitle{fill:#e5e5e5;font-size:13px;font-weight:700}
+.dsub{fill:#a3a3a3;font-size:11px}
+.dshould{fill:#fafafa;font-weight:800}
+.good{fill:#4ade80;font-size:16px;font-weight:800}
+.nogood{fill:#f87171;font-size:16px;font-weight:800}
+.tg{cursor:pointer}
+.toggle{fill:#475569}
+.toggle.on{fill:#22c55e}
+.knob{fill:#fff;pointer-events:none}
+.led{fill:#3f3f46}
+.led.on{fill:#4ade80;filter:drop-shadow(0 0 3px #4ade80)}
+.seg{fill:#3b1a1a;transition:fill .08s}
+.seg.on{fill:#ff3b30;filter:drop-shadow(0 0 5px #ff3b30)}
+.seglbl{font-size:9px;font-weight:700;fill:#8a5555}
+.seg.on + .seglbl{fill:#ffe4e1}
+.note{fill:#fef3c7;stroke:#d97706;stroke-width:1.5}
+.notetxt{fill:#78350f;font-size:12.5px}
+.pin{fill:var(--panel);stroke:var(--gate-stroke);stroke-width:1.5}
+.pin.on{fill:var(--on);stroke:var(--on)}
+.pin.open{stroke:var(--muted);stroke-dasharray:2 2}
+.pin-hit{fill:transparent;cursor:crosshair}
+.pinwrap:hover .pin,.pinwrap.target .pin{r:6px;stroke:var(--accent);stroke-width:2.5;stroke-dasharray:none}
+.selbox{fill:var(--accent);fill-opacity:.07;stroke:var(--accent);stroke-width:1.2;stroke-dasharray:5 4}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo" id="logo"></span>7-Segment Logic Lab</div>
+  <button class="btn task" id="taskBtn" title="Choose a task">📋 Tasks</button>
+  <span class="sep"></span>
+  <label>Outputs
+    <select id="bits" title="How many outputs the controller has">
+      <option value="1">1 bit</option><option value="2">2 bits</option><option value="3">3 bits</option>
+      <option value="4">4 bits</option><option value="5">5 bits</option><option value="6">6 bits</option>
+    </select>
+  </label>
+  <label>Show
+    <select id="mode">
+      <option value="hex">Hex 0–F</option>
+      <option value="dec">0–9 (10+ = don't care)</option>
+      <option value="decblank">0–9 (10+ = blank)</option>
+    </select>
+  </label>
+  <label>Display
+    <select id="disptype">
+      <option value="cc">Common cathode (1 = lit)</option>
+      <option value="ca">Common anode (0 = lit)</option>
+    </select>
+  </label>
+  <span class="sep"></span>
+  <div class="group">
+    <button class="btn" id="stepDown" title="Previous input value (↓)">−1</button>
+    <button class="btn" id="play" title="Count through all input values">▶ Count</button>
+    <button class="btn" id="stepUp" title="Next input value (↑)">+1</button>
+  </div>
+  <span class="sep"></span>
+  <div class="group">
+    <button class="btn" id="undo" title="Undo (Ctrl+Z)">↶</button>
+    <button class="btn" id="redo" title="Redo (Ctrl+Y)">↷</button>
+  </div>
+  <span class="sep"></span>
+  <div class="group">
+    <button class="btn" id="open" title="Open a circuit from a .json file">📂 Open</button>
+    <button class="btn" id="saveFile" title="Save the circuit to a .json file">💾 Save</button>
+    <button class="btn" id="image" title="Save a picture of your circuit (PNG) — e.g. to hand in">🖼 Image</button>
+    <button class="btn danger" id="clear" title="Remove all gates, wires and notes">🗑 Clear</button>
+  </div>
+  <div class="spacer"></div>
+  <div class="group">
+    <button class="btn active" id="toggleTable" title="Show/hide the check panel">Check panel</button>
+    <button class="btn primary" id="help">Help</button>
+  </div>
+  <input type="file" id="fileInput" accept=".json,application/json" hidden>
+</header>
+
+<div class="main">
+  <aside class="left">
+    <h3>Components</h3>
+    <div id="palette" class="palette"></div>
+    <p class="hint">Drag onto the board, or click to add.</p>
+    <h3>Selected</h3>
+    <div id="selpanel"></div>
+    <h3>Gates used</h3>
+    <div id="stats"></div>
+  </aside>
+
+  <div id="stage">
+    <svg id="svg" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="gridpat" width="20" height="20" patternUnits="userSpaceOnUse">
+          <circle class="gdot" cx="0" cy="0" r="1.3"/>
+        </pattern>
+      </defs>
+      <g id="viewport">
+        <rect class="gridbg" x="-20000" y="-20000" width="40000" height="40000"/>
+        <g id="world"></g>
+      </g>
+    </svg>
+    <div class="overlay" id="emptyHint">👈 Drag gates onto the board, then drag from pin to pin to connect them.</div>
+    <div class="overlay" id="status"></div>
+    <div class="overlay" id="zoom">
+      <button class="btn" id="zoomOut" title="Zoom out">−</button>
+      <span id="zoomPct">100%</span>
+      <button class="btn" id="zoomIn" title="Zoom in">+</button>
+      <button class="btn" id="fit" title="Fit everything on screen">Fit</button>
+    </div>
+  </div>
+
+  <aside class="right" id="rightPanel">
+    <div id="taskCard"></div>
+    <div id="summary"></div>
+    <div class="tabs">
+      <button class="tab" data-tab="table">Truth table</button>
+      <button class="tab" data-tab="kmap">Karnaugh map</button>
+      <button class="tab" data-tab="expr">Expressions</button>
+      <button class="tab" data-tab="solution">💡 Solution</button>
+    </div>
+    <div id="tabBody"></div>
+  </aside>
+</div>
+
+<div id="ghost"></div>
+<div id="toast"></div>
+
+<dialog id="taskDlg">
+  <h2>Choose a task</h2>
+  <p class="hint">A task sets up the controller and display for you. Work through them in order, from the warm-up to a full hex decoder.</p>
+  <div class="tasklist" id="taskList"></div>
+  <form method="dialog" style="text-align:right"><button class="btn">Close</button></form>
+</dialog>
+
+<dialog id="helpDlg">
+  <h2>How to use 7-Segment Logic Lab</h2>
+  <p>The <b>controller</b> on the left has a limited number of outputs (bits). Build a circuit of logic gates that turns those bits into the 7 signals <b>a–g</b> that light the right digit on the display.</p>
+  <h4>Suggested method</h4>
+  <ol>
+    <li>Pick a task with <b>📋 Tasks</b>, or choose your own settings in the top bar. A is always the most significant bit.</li>
+    <li>In the <b>Truth table</b>, each column a–g shows when that segment pin must be 1 or 0.</li>
+    <li>Choose one segment and open the <b>Karnaugh map</b> tab. Circle groups of 1s (you may include X's) and write a simplified expression.</li>
+    <li>Build that expression with gates and wire the result to the segment's pin on the display.</li>
+    <li>The <b>Expressions</b> tab shows the formula your wiring actually computes, so you can compare it with your own.</li>
+    <li>When the column turns green ✓, move to the next segment. Challenge: use as few gates as possible!</li>
+    <li>Stuck? The <b>💡 Solution</b> tab reveals a suggested answer one segment at a time, shows its groups in the Karnaugh map, and can build the whole circuit for you.</li>
+  </ol>
+  <h4>Controls</h4>
+  <ul>
+    <li><b>Add:</b> drag a component from the left panel, or click it. <b>NOTE</b> adds a text note (double-click it to edit).</li>
+    <li><b>Wire:</b> drag from a pin (small circle) to another pin. One output can feed many inputs.</li>
+    <li><b>Move or remove a wire:</b> drag it off the input pin. Drop it on empty space to delete it.</li>
+    <li><b>Select several:</b> <kbd>Shift</kbd>+drag on the board or <kbd>Shift</kbd>+click. <kbd>Ctrl</kbd>+<kbd>A</kbd> selects everything.</li>
+    <li><b>Delete:</b> <kbd>Delete</kbd>, or right-click a part. <b>Copy/paste:</b> <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd>. <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicates.</li>
+    <li><b>Inputs:</b> click the controller switches, click a truth-table row or K-map cell, or use <kbd>↑</kbd>/<kbd>↓</kbd>.</li>
+    <li><b>View:</b> drag the empty board to pan; use the mouse wheel to zoom.</li>
+    <li><b>Undo/redo:</b> <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd>. Your work is saved in this browser automatically. <b>🖼 Image</b> saves a picture you can hand in.</li>
+  </ul>
+  <h4>Good to know</h4>
+  <ul>
+    <li>Unconnected gate inputs count as <b>0</b>. Gates can have 2–4 inputs (select a gate and use +/−).</li>
+    <li><b>Common cathode:</b> a segment lights when its pin is 1. <b>Common anode:</b> it lights when its pin is 0.</li>
+    <li><b>Don't care (X):</b> input values the display never needs to show. Output whatever makes your circuit simplest.</li>
+  </ul>
+  <form method="dialog" style="text-align:right"><button class="btn primary">Got it</button></form>
+</dialog>
+
+<script>
+(() => {
+'use strict';
+
+// ---------- constants ----------
+const SEG = 'abcdefg';
+const DIGITS = ['1111110','0110000','1101101','1111001','0110011','1011011','1011111','1110000',
+                '1111111','1111011','1110111','0011111','1001110','0111101','1001111','1000111'];
+const DIGIT_CHARS = '0123456789AbCdEF';
+const GATE_TYPES = ['AND','NAND','OR','NOR','XOR','XNOR','NOT'];
+const BASE = {AND:'AND',NAND:'AND',OR:'OR',NOR:'OR',XOR:'XOR',XNOR:'XOR',NOT:'NOT'};
+const INV = new Set(['NAND','NOR','XNOR','NOT']);
+const GATE_INFO = {
+  AND:'Output is 1 only when <b>all</b> inputs are 1.',
+  NAND:'NOT-AND: output is 0 only when all inputs are 1.',
+  OR:'Output is 1 when <b>at least one</b> input is 1.',
+  NOR:'NOT-OR: output is 1 only when all inputs are 0.',
+  XOR:'Output is 1 when an <b>odd</b> number of inputs are 1.',
+  XNOR:'Output is 1 when an <b>even</b> number of inputs are 1.',
+  NOT:'Output is the opposite of the input.'
+};
+const TASKS = [
+  {id:'free', title:'Free build', desc:'No fixed goal. Choose any settings you like in the top bar.', set:null},
+  {id:'t1', title:'1 · Warm-up: 1 bit', desc:'Show 0 when A = 0 and 1 when A = 1. Some segments are always on, some only need A or NOT A.', set:{bits:1, mode:'hex', disp:'cc'}},
+  {id:'t2', title:'2 · Two bits: 0–3', desc:'Show the digits 0, 1, 2 and 3. Tip: make NOT A and NOT B first.', set:{bits:2, mode:'hex', disp:'cc'}},
+  {id:'t3', title:'3 · Three bits: 0–7', desc:'Show 0–7. Draw a Karnaugh map for each segment before you build.', set:{bits:3, mode:'hex', disp:'cc'}},
+  {id:'t4', title:'4 · BCD decoder: 0–9', desc:'4 bits, digits 0–9. Values 10–15 never happen, so they are don\'t-cares (X). Use them to simplify!', set:{bits:4, mode:'dec', disp:'cc'}},
+  {id:'t5', title:'5 · Hex decoder: 0–F', desc:'4 bits, all 16 hex digits: 0–9 and A, b, C, d, E, F.', set:{bits:4, mode:'hex', disp:'cc'}},
+  {id:'t6', title:'6 · Common anode', desc:'Like the BCD decoder, but the display lights a segment when its pin is 0. Every output is inverted!', set:{bits:4, mode:'dec', disp:'ca'}},
+  {id:'t7', title:'7 · NAND only: 0–3', desc:'Build the 0–3 decoder using only NAND gates. Any logic function can be built from NAND alone!', set:{bits:2, mode:'hex', disp:'cc', allowed:['NAND']}},
+  {id:'t8', title:'8 · NOR only: 0–3', desc:'The same decoder, but with only NOR gates.', set:{bits:2, mode:'hex', disp:'cc', allowed:['NOR']}},
+];
+const MODE_LABEL = {hex:'Hex 0–F', dec:'0–9 (10+ don\'t care)', decblank:'0–9 (10+ blank)'};
+const LETTERS = 'ABCDEFGH';
+const STORE = 'sevenseg-lab-v1';
+const GRID = 10;
+
+const $ = s => document.querySelector(s);
+const isGate = t => GATE_TYPES.includes(t);
+const snap = v => Math.round(v / GRID) * GRID;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const uid = () => Math.random().toString(36).slice(2, 9);
+const esc = s => String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const fixed = c => c.type === 'CTRL' || c.type === 'DISP';
+
+// ---------- state ----------
+let S;
+let view = {tx: 40, ty: 20, k: 1};
+let selC = new Set();      // selected component ids
+let selW = null;           // selected wire id
+let drag = null, pal = null;
+let undoStack = [], redoStack = [];
+let tableView = 'exp', tab = 'table', kmapSeg = 0;
+let playTimer = null, addCount = 0;
+let clip = null, pasteN = 0;
+let lastSelSig = '', lastAnaSig = '', lastAllOk = null;
+let revealed = new Set(), revealKey = '';   // segments whose solution is shown
+const NOSOL = new URLSearchParams(location.search).has('nosolution');   // ?nosolution hides all solutions
+
+const svg = $('#svg'), world = $('#world'), viewport = $('#viewport');
+
+function defaultState() {
+  return {bits: 4, mode: 'hex', disp: 'cc', task: 'free', allowed: null, inputs: [0,0,0,0],
+    comps: [{id:'ctrl', type:'CTRL', x:40, y:60}, {id:'disp', type:'DISP', x:760, y:60}],
+    wires: []};
+}
+
+function normalize(o) {
+  if (!o || typeof o !== 'object' || !Array.isArray(o.comps) || !Array.isArray(o.wires)) return null;
+  const bits = clamp(parseInt(o.bits) || 4, 1, 6);
+  const allowed = Array.isArray(o.allowed) ? o.allowed.filter(isGate) : [];
+  const s = {bits, mode: ['hex','dec','decblank'].includes(o.mode) ? o.mode : 'hex',
+    disp: o.disp === 'ca' ? 'ca' : 'cc',
+    task: TASKS.some(t => t.id === o.task) ? o.task : 'free',
+    allowed: allowed.length ? allowed : null,
+    inputs: [], comps: [], wires: []};
+  const idOk = id => typeof id === 'string' && /^[\w-]{1,40}$/.test(id);
+  for (const c of o.comps) {
+    if (!c || !(isGate(c.type) || ['CTRL','DISP','CONST','NOTE'].includes(c.type))) continue;
+    const id = c.type === 'CTRL' ? 'ctrl' : c.type === 'DISP' ? 'disp' : (idOk(c.id) ? c.id : uid());
+    if (s.comps.some(x => x.id === id)) continue;
+    const nc = {id, type: c.type, x: snap(+c.x || 0), y: snap(+c.y || 0)};
+    if (isGate(c.type) && c.type !== 'NOT') nc.n = clamp(parseInt(c.n) || 2, 2, 4);
+    if (c.type === 'CONST') nc.value = c.value ? 1 : 0;
+    if (c.type === 'NOTE') nc.text = String(c.text == null ? '' : c.text).slice(0, 500);
+    s.comps.push(nc);
+  }
+  if (!s.comps.some(c => c.id === 'ctrl')) s.comps.unshift({id:'ctrl', type:'CTRL', x:40, y:60});
+  if (!s.comps.some(c => c.id === 'disp')) s.comps.push({id:'disp', type:'DISP', x:760, y:60});
+  s.inputs = Array.from({length: bits}, (_, i) => Array.isArray(o.inputs) && o.inputs[i] ? 1 : 0);
+  const byId = new Map(s.comps.map(c => [c.id, c]));
+  const used = new Set();
+  for (const w of o.wires) {
+    if (!w || !w.from || !w.to) continue;
+    const fc = byId.get(w.from.c), tc = byId.get(w.to.c);
+    const fp = parseInt(w.from.p), tp = parseInt(w.to.p);
+    if (!fc || !tc || !(fp >= 0 && fp < outPinsLocal(fc, bits).length) || !(tp >= 0 && tp < inPinsLocal(tc).length)) continue;
+    const key = tc.id + ':' + tp;
+    if (used.has(key)) continue;
+    used.add(key);
+    s.wires.push({id: idOk(w.id) ? w.id : uid(), from: {c: fc.id, p: fp}, to: {c: tc.id, p: tp}});
+  }
+  return s;
+}
+
+function load() {
+  try { S = normalize(JSON.parse(localStorage.getItem(STORE))); } catch (e) { S = null; }
+  if (!S) S = defaultState();
+}
+function save() { try { localStorage.setItem(STORE, JSON.stringify(S)); } catch (e) {} }
+
+function pushUndo() {
+  undoStack.push(JSON.stringify(S));
+  if (undoStack.length > 200) undoStack.shift();
+  redoStack = [];
+}
+function restore(json) { S = normalize(JSON.parse(json)) || defaultState(); clearSel(); syncControls(); commit(); }
+function undo() { if (!undoStack.length) return; redoStack.push(JSON.stringify(S)); restore(undoStack.pop()); }
+function redo() { if (!redoStack.length) return; undoStack.push(JSON.stringify(S)); restore(redoStack.pop()); }
+function commit() { save(); render(); }
+
+function clearSel() { selC = new Set(); selW = null; }
+function selectOnly(id) { selC = new Set([id]); selW = null; }
+
+const comp = id => S.comps.find(c => c.id === id);
+const curValue = () => S.inputs.reduce((a, b) => a * 2 + b, 0);
+const toInputs = v => Array.from({length: S.bits}, (_, i) => (v >> (S.bits - 1 - i)) & 1);
+const taskOf = () => TASKS.find(t => t.id === S.task) || TASKS[0];
+const allowedType = t => !isGate(t) || !S.allowed || S.allowed.includes(t);
+const gateCount = () => S.comps.filter(c => isGate(c.type)).length;
+
+// ---------- geometry ----------
+function gateGeom(c) {
+  const n = c.type === 'NOT' ? 1 : (c.n || 2);
+  return {n, h: Math.max(40, n * 20), outX: c.type === 'NOT' ? 70 : 90};
+}
+function wrapText(t, max = 28) {
+  const out = [];
+  for (const para of String(t).split('\n')) {
+    let line = '';
+    for (const word of para.split(/\s+/)) {
+      if (!word) continue;
+      if (line && (line + ' ' + word).length > max) { out.push(line); line = word; }
+      else line = line ? line + ' ' + word : word;
+    }
+    out.push(line);
+  }
+  return out.slice(0, 24);
+}
+function noteGeom(c) {
+  const lines = wrapText(c.text || 'Note');
+  const w = Math.max(90, Math.min(260, Math.max(...lines.map(l => l.length)) * 7 + 26));
+  return {lines, w, h: lines.length * 17 + 18};
+}
+function inPinsLocal(c) {
+  if (isGate(c.type)) {
+    const {n, h} = gateGeom(c);
+    return Array.from({length: n}, (_, i) => ({x: -20, y: h / 2 - (n - 1) * 10 + i * 20}));
+  }
+  if (c.type === 'DISP') return Array.from({length: 7}, (_, i) => ({x: -20, y: 50 + i * 30}));
+  return [];
+}
+function outPinsLocal(c, bits = S.bits) {
+  if (isGate(c.type)) { const {h, outX} = gateGeom(c); return [{x: outX, y: h / 2}]; }
+  if (c.type === 'CTRL') return Array.from({length: bits}, (_, i) => ({x: 160, y: 60 + i * 40}));
+  if (c.type === 'CONST') return [{x: 60, y: 20}];
+  return [];
+}
+function compBox(c) {
+  if (isGate(c.type)) { const {h, outX} = gateGeom(c); return {x0: c.x - 20, y0: c.y, x1: c.x + outX, y1: c.y + h}; }
+  if (c.type === 'CTRL') return {x0: c.x, y0: c.y, x1: c.x + 160, y1: c.y + 50 + S.bits * 40};
+  if (c.type === 'DISP') return {x0: c.x - 20, y0: c.y, x1: c.x + 180, y1: c.y + 264};
+  if (c.type === 'NOTE') { const g = noteGeom(c); return {x0: c.x, y0: c.y, x1: c.x + g.w, y1: c.y + g.h}; }
+  return {x0: c.x, y0: c.y, x1: c.x + 60, y1: c.y + 40};
+}
+function boundsOf(list) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const c of list) {
+    const b = compBox(c);
+    x0 = Math.min(x0, b.x0); y0 = Math.min(y0, b.y0); x1 = Math.max(x1, b.x1); y1 = Math.max(y1, b.y1);
+  }
+  return {x0, y0, x1, y1};
+}
+function pinWorld(cid, kind, p, byId) {
+  const c = byId ? byId.get(cid) : comp(cid);
+  if (!c) return null;
+  const pt = (kind === 'in' ? inPinsLocal(c) : outPinsLocal(c))[p];
+  return pt ? {x: c.x + pt.x, y: c.y + pt.y} : null;
+}
+function wirePath(a, b) {
+  const d = Math.max(30, Math.abs(b.x - a.x) * 0.5);
+  return `M${a.x} ${a.y} C${a.x + d} ${a.y} ${b.x - d} ${b.y} ${b.x} ${b.y}`;
+}
+
+// ---------- simulation ----------
+function gateFn(type, ins) {
+  switch (type) {
+    case 'AND':  return ins.every(v => v) ? 1 : 0;
+    case 'NAND': return ins.every(v => v) ? 0 : 1;
+    case 'OR':   return ins.some(v => v) ? 1 : 0;
+    case 'NOR':  return ins.some(v => v) ? 0 : 1;
+    case 'XOR':  return ins.reduce((a, b) => a ^ b, 0);
+    case 'XNOR': return 1 - ins.reduce((a, b) => a ^ b, 0);
+    case 'NOT':  return ins[0] ? 0 : 1;
+  }
+  return 0;
+}
+function buildIndex() {
+  const inMap = new Map();
+  for (const w of S.wires) inMap.set(w.to.c + ':' + w.to.p, w);
+  return {byId: new Map(S.comps.map(c => [c.id, c])), inMap};
+}
+function evaluate(inVals, idx) {
+  const out = new Map(), gates = [];
+  for (const c of S.comps) {
+    if (c.type === 'CTRL') inVals.forEach((v, i) => out.set(c.id + ':' + i, v));
+    else if (c.type === 'CONST') out.set(c.id + ':0', c.value ? 1 : 0);
+    else if (isGate(c.type)) { out.set(c.id + ':0', 0); gates.push(c); }
+  }
+  const src = (cid, p) => {
+    const w = idx.inMap.get(cid + ':' + p);
+    return w ? (out.get(w.from.c + ':' + w.from.p) || 0) : null;
+  };
+  let stable = false;
+  for (let it = 0; it < gates.length + 3 && !stable; it++) {
+    stable = true;
+    for (const g of gates) {
+      const n = g.type === 'NOT' ? 1 : g.n, ins = [];
+      for (let i = 0; i < n; i++) ins.push(src(g.id, i) || 0);
+      const v = gateFn(g.type, ins);
+      if (out.get(g.id + ':0') !== v) { out.set(g.id + ':0', v); stable = false; }
+    }
+  }
+  return {out, disp: Array.from({length: 7}, (_, i) => src('disp', i)), stable};
+}
+const litOf = lvl => lvl === null ? false : (S.disp === 'cc' ? lvl === 1 : lvl === 0);
+const levelOf = lit => S.disp === 'cc' ? (lit ? 1 : 0) : (lit ? 0 : 1);
+function expectedLit(v) {
+  const pat = p => p.split('').map(ch => ch === '1');
+  if (S.mode === 'hex') return v < 16 ? pat(DIGITS[v]) : null;
+  if (v < 10) return pat(DIGITS[v]);
+  return S.mode === 'decblank' ? Array(7).fill(false) : null;
+}
+function digitLabel(v) {
+  if (!expectedLit(v)) return 'X';
+  if (S.mode === 'decblank' && v >= 10) return '␣';
+  return DIGIT_CHARS[v];
+}
+function analyze(idx) {
+  const rows = [];
+  let ok = 0, cnt = 0, unstable = false;
+  for (let v = 0; v < (1 << S.bits); v++) {
+    const ins = toInputs(v), r = evaluate(ins, idx), exp = expectedLit(v);
+    const lit = r.disp.map(litOf);
+    const good = exp ? exp.every((b, i) => b === lit[i]) : null;
+    if (!r.stable) unstable = true;
+    if (exp) { cnt++; if (good) ok++; }
+    rows.push({v, ins, exp, lvl: r.disp, lit, good});
+  }
+  const segGood = SEG.split('').map((_, i) => rows.every(r => !r.exp || r.exp[i] === r.lit[i]));
+  const disallowed = S.allowed ? [...new Set(S.comps.filter(c => isGate(c.type) && !S.allowed.includes(c.type)).map(c => c.type))] : [];
+  return {rows, ok, cnt, unstable, segGood, disallowed};
+}
+// Boolean expression that the wiring computes for each display pin
+function buildExprs(idx) {
+  const memo = new Map(), visiting = new Set();
+  const ov = h => `<span class="ov">${h}</span>`;
+  function src(cid, p) {
+    const w = idx.inMap.get(cid + ':' + p);
+    return w ? node(w.from.c, w.from.p) : {h: '0', p: 3};
+  }
+  function node(cid, p) {
+    const c = idx.byId.get(cid);
+    if (c.type === 'CTRL') return {h: `<i>${LETTERS[p]}</i>`, p: 3};
+    if (c.type === 'CONST') return {h: String(c.value ? 1 : 0), p: 3};
+    if (memo.has(cid)) return memo.get(cid);
+    if (visiting.has(cid)) return {h: '⟲', p: 3};
+    visiting.add(cid);
+    const n = c.type === 'NOT' ? 1 : c.n, ch = [];
+    for (let i = 0; i < n; i++) ch.push(src(cid, i));
+    const par = (x, need) => need(x.p) ? `(${x.h})` : x.h;
+    let r;
+    if (c.type === 'NOT') r = {h: ov(ch[0].h), p: 3};
+    else {
+      const base = BASE[c.type];
+      let inner;
+      if (base === 'AND') inner = {h: ch.map(x => par(x, q => q < 2)).join('·'), p: 2};
+      else if (base === 'OR') inner = {h: ch.map(x => par(x, q => q === 1)).join(' + '), p: 0};
+      else inner = {h: ch.map(x => par(x, q => q === 0)).join(' ⊕ '), p: 1};
+      r = INV.has(c.type) ? {h: ov(inner.h), p: 3} : inner;
+    }
+    if (r.h.length > 2500) r = {h: '…', p: 3};
+    visiting.delete(cid);
+    memo.set(cid, r);
+    return r;
+  }
+  return SEG.split('').map((_, i) => {
+    const w = idx.inMap.get('disp:' + i);
+    return w ? node(w.from.c, w.from.p).h : null;
+  });
+}
+
+// ---------- rendering ----------
+function gateShape(type, n, h) {
+  const base = BASE[type], inv = INV.has(type);
+  const outX = type === 'NOT' ? 70 : 90;
+  let s = '';
+  for (let i = 0; i < n; i++) {
+    const y = h / 2 - (n - 1) * 10 + i * 20;
+    let x1 = 0;
+    if (base === 'OR' || base === 'XOR') { const t = y / h; x1 = 30 * t * (1 - t); }
+    s += `<line class="stub" x1="-20" y1="${y}" x2="${x1}" y2="${y}"/>`;
+  }
+  let body, end = 60, extra = '', lx = 26;
+  if (base === 'AND') { body = `M0 0 H${60 - h / 2} A${h / 2} ${h / 2} 0 0 1 ${60 - h / 2} ${h} H0 Z`; lx = 24; }
+  else if (base === 'OR') { body = `M0 0 Q36 0 60 ${h / 2} Q36 ${h} 0 ${h} Q15 ${h / 2} 0 0 Z`; lx = 29; }
+  else if (base === 'XOR') {
+    body = `M8 0 Q40 0 60 ${h / 2} Q40 ${h} 8 ${h} Q23 ${h / 2} 8 0 Z`;
+    extra = `<path class="stub" d="M0 0 Q15 ${h / 2} 0 ${h}"/>`; lx = 33;
+  } else { body = `M0 0 L44 ${h / 2} L0 ${h} Z`; end = 44; lx = 14; }
+  s += `<path class="body" d="${body}"/>${extra}`;
+  if (inv) s += `<circle class="body" cx="${end + 5}" cy="${h / 2}" r="5"/>`;
+  s += `<line class="stub" x1="${end + (inv ? 10 : 0)}" y1="${h / 2}" x2="${outX}" y2="${h / 2}"/>`;
+  s += `<text class="glbl" x="${lx}" y="${h / 2 + 3.5}" text-anchor="middle"${base === 'NOT' ? ' style="font-size:7.5px"' : ''}>${type}</text>`;
+  return s;
+}
+
+function segPolys(ox, oy, W, H, t) {
+  const g = 3, ht = t / 2;
+  const hs = (x, y, len) => `${x+g},${y} ${x+g+ht},${y-ht} ${x+len-g-ht},${y-ht} ${x+len-g},${y} ${x+len-g-ht},${y+ht} ${x+g+ht},${y+ht}`;
+  const vs = (x, y, len) => `${x},${y+g} ${x+ht},${y+g+ht} ${x+ht},${y+len-g-ht} ${x},${y+len-g} ${x-ht},${y+len-g-ht} ${x-ht},${y+g+ht}`;
+  return [
+    [hs(ox, oy, W), ox + W / 2, oy],
+    [vs(ox + W, oy, H / 2), ox + W, oy + H / 4],
+    [vs(ox + W, oy + H / 2, H / 2), ox + W, oy + 3 * H / 4],
+    [hs(ox, oy + H, W), ox + W / 2, oy + H],
+    [vs(ox, oy + H / 2, H / 2), ox, oy + 3 * H / 4],
+    [vs(ox, oy, H / 2), ox, oy + H / 4],
+    [hs(ox, oy + H / 2, W), ox + W / 2, oy + H / 2],
+  ];
+}
+const SEGS = segPolys(84, 52, 64, 144, 13);
+function miniDigit(lit, w = 13, h = 24) {
+  return `<svg class="mini" viewBox="72 40 88 168" width="${w}" height="${h}">${SEGS.map(([pts], i) => `<polygon points="${pts}"${lit[i] ? ' class="on"' : ''}/>`).join('')}</svg>`;
+}
+
+function pinSvg(c, kind, i, pt, val, connected, label) {
+  const key = c.id + '|' + kind + '|' + i;
+  const tgt = drag && drag.kind === 'wire' && drag.hover === key ? ' target' : '';
+  const vtxt = val === null || val === undefined ? 'not connected' : val;
+  return `<g class="pinwrap${tgt}"><circle class="pin ${kind}${val === 1 ? ' on' : ''}${connected ? '' : ' open'}" cx="${pt.x}" cy="${pt.y}" r="4"/>` +
+         `<circle class="pin-hit" data-pin="${key}" cx="${pt.x}" cy="${pt.y}" r="9"><title>${label} = ${vtxt}</title></circle></g>`;
+}
+
+function renderComp(c, res, idx) {
+  const selc = selC.has(c.id) ? ' sel' : '';
+  let s = `<g class="comp${selc}" data-comp="${c.id}" transform="translate(${c.x} ${c.y})">`;
+  const inVal = i => { const w = idx.inMap.get(c.id + ':' + i); return w ? res.out.get(w.from.c + ':' + w.from.p) : null; };
+  let inLbl = i => `Input ${i + 1}`, outLbl = () => 'Output';
+
+  if (isGate(c.type)) {
+    const {n, h, outX} = gateGeom(c);
+    s += `<rect class="hitbox" x="-2" y="-4" width="${outX - 16}" height="${h + 8}"/>`;
+    s += gateShape(c.type, n, h);
+    inLbl = i => `${c.type} input ${i + 1}`; outLbl = () => `${c.type} output`;
+  } else if (c.type === 'CTRL') {
+    const H = 50 + S.bits * 40, v = curValue();
+    s += `<rect class="chip" x="0" y="0" width="140" height="${H}" rx="9"/>`;
+    s += `<path class="chipnotch" d="M58 0 A12 12 0 0 0 82 0 Z"/>`;
+    s += `<text class="chiptxt" x="12" y="22">Controller</text>`;
+    s += `<text class="chipsub" x="12" y="37">value</text><text class="chipval" x="128" y="38" text-anchor="end">${v}</text>`;
+    for (let i = 0; i < S.bits; i++) {
+      const y = 60 + i * 40, on = S.inputs[i];
+      s += `<g class="tg" data-toggle="${i}"><rect class="toggle${on ? ' on' : ''}" x="12" y="${y - 10}" width="36" height="20" rx="10"/>` +
+           `<circle class="knob" cx="${on ? 38 : 22}" cy="${y}" r="7"/><title>Click to switch ${LETTERS[i]}</title></g>`;
+      s += `<text class="chiptxt" x="58" y="${y + 4.5}">${LETTERS[i]}</text><text class="chipsub" x="73" y="${y + 4}">weight ${1 << (S.bits - 1 - i)}</text>`;
+      s += `<circle class="led${on ? ' on' : ''}" cx="130" cy="${y}" r="3.5"/>`;
+      s += `<line class="stub" x1="140" y1="${y}" x2="160" y2="${y}"/>`;
+    }
+    outLbl = i => `Output ${LETTERS[i]}`;
+  } else if (c.type === 'DISP') {
+    s += `<rect class="bezelbox" x="0" y="0" width="180" height="264" rx="10"/>`;
+    s += `<text class="dtitle" x="12" y="21">Display</text>`;
+    s += `<text class="dsub" x="168" y="21" text-anchor="end">${S.disp === 'cc' ? 'CC · 1 = lit' : 'CA · 0 = lit'}</text>`;
+    s += `<rect class="bezel" x="50" y="32" width="118" height="192" rx="6"/>`;
+    for (let i = 0; i < 7; i++) {
+      const y = 50 + i * 30;
+      s += `<line class="stub" x1="-20" y1="${y}" x2="0" y2="${y}"/><text class="plbl" x="10" y="${y + 4.5}">${SEG[i]}</text>`;
+    }
+    SEGS.forEach(([pts, cx, cy], i) => {
+      s += `<polygon class="seg${litOf(res.disp[i]) ? ' on' : ''}" points="${pts}"/><text class="seglbl" x="${cx}" y="${cy + 3}" text-anchor="middle">${SEG[i]}</text>`;
+    });
+    const v = curValue(), exp = expectedLit(v);
+    s += `<text class="dsub" x="12" y="249">Should show: <tspan class="dshould">${exp ? digitLabel(v) : 'X (don\'t care)'}</tspan></text>`;
+    if (exp) {
+      const good = exp.every((b, i) => b === litOf(res.disp[i]));
+      s += `<text class="${good ? 'good' : 'nogood'}" x="168" y="250" text-anchor="end">${good ? '✓' : '✗'}</text>`;
+    }
+    inLbl = i => `Segment ${SEG[i]}`;
+  } else if (c.type === 'CONST') {
+    s += `<rect class="box" x="0" y="0" width="40" height="40" rx="6"/>`;
+    s += `<text class="cval" x="20" y="27" text-anchor="middle">${c.value ? 1 : 0}</text>`;
+    s += `<line class="stub" x1="40" y1="20" x2="60" y2="20"/>`;
+    outLbl = () => `Constant`;
+  } else if (c.type === 'NOTE') {
+    const g = noteGeom(c);
+    s += `<rect class="note" x="0" y="0" width="${g.w}" height="${g.h}" rx="4"/>`;
+    g.lines.forEach((l, i) => { s += `<text class="notetxt" x="12" y="${22 + i * 17}">${esc(l)}</text>`; });
+  }
+  inPinsLocal(c).forEach((pt, i) => { s += pinSvg(c, 'in', i, pt, inVal(i), idx.inMap.has(c.id + ':' + i), inLbl(i)); });
+  outPinsLocal(c).forEach((pt, i) => { s += pinSvg(c, 'out', i, pt, res.out.get(c.id + ':' + i), true, outLbl(i)); });
+  return s + '</g>';
+}
+
+function applyView() {
+  viewport.setAttribute('transform', `translate(${view.tx} ${view.ty}) scale(${view.k})`);
+  $('#zoomPct').textContent = Math.round(view.k * 100) + '%';
+}
+
+function render() {
+  const idx = buildIndex();
+  const res = evaluate(S.inputs, idx);
+  let h = '';
+  // notes behind everything else
+  const order = [...S.comps.filter(c => c.type === 'NOTE'), ...S.comps.filter(c => c.type !== 'NOTE')];
+  for (const c of order) if (c.type === 'NOTE') h += renderComp(c, res, idx);
+  for (const w of S.wires) {
+    const a = pinWorld(w.from.c, 'out', w.from.p, idx.byId), b = pinWorld(w.to.c, 'in', w.to.p, idx.byId);
+    if (!a || !b) continue;
+    const d = wirePath(a, b), v = res.out.get(w.from.c + ':' + w.from.p) ? 1 : 0;
+    h += `<g class="wg">${selW === w.id ? `<path class="wire-sel" d="${d}"/>` : ''}<path class="wire ${v ? 'on' : 'off'}" d="${d}"/>` +
+         `<path class="wire-hit" data-wire="${w.id}" d="${d}"><title>Wire = ${v}</title></path></g>`;
+  }
+  for (const c of order) if (c.type !== 'NOTE') h += renderComp(c, res, idx);
+  if (drag && drag.kind === 'wire') {
+    const a = pinWorld(drag.from.c, drag.from.kind, drag.from.p, idx.byId);
+    let b = {x: drag.x, y: drag.y};
+    if (drag.hover) { const [hc, hk, hp] = drag.hover.split('|'); b = pinWorld(hc, hk, +hp, idx.byId) || b; }
+    if (a) h += `<path class="wire temp" d="${drag.from.kind === 'out' ? wirePath(a, b) : wirePath(b, a)}"/>`;
+  }
+  if (drag && drag.kind === 'box') {
+    const x = Math.min(drag.x0, drag.x1), y = Math.min(drag.y0, drag.y1);
+    h += `<rect class="selbox" x="${x}" y="${y}" width="${Math.abs(drag.x1 - drag.x0)}" height="${Math.abs(drag.y1 - drag.y0)}"/>`;
+  }
+  world.innerHTML = h;
+  applyView();
+  renderStatus(res);
+  renderSel();
+  renderStats();
+  document.querySelectorAll('.pal').forEach(p => p.classList.toggle('off', !allowedType(p.dataset.type)));
+  $('#emptyHint').hidden = S.comps.some(c => isGate(c.type) || c.type === 'CONST') || S.wires.length > 0;
+  $('#taskBtn').textContent = '📋 ' + (S.task === 'free' ? 'Tasks' : taskOf().title);
+  const sig = JSON.stringify([S.wires, S.comps.map(c => [c.id, c.type, c.n, c.value]), S.bits, S.mode, S.disp, S.inputs,
+                              S.task, S.allowed, tableView, tab, kmapSeg, [...revealed]]);
+  if (sig !== lastAnaSig) { lastAnaSig = sig; renderAnalysis(idx); }
+  $('#undo').disabled = !undoStack.length;
+  $('#redo').disabled = !redoStack.length;
+}
+
+function renderStatus(res) {
+  const v = curValue(), exp = expectedLit(v);
+  let s = `<span>Input <span class="bits">${S.inputs.join('')}</span> = <b>${v}</b></span><span>→ should show <b>${exp ? digitLabel(v) : 'X'}</b></span>`;
+  if (exp) {
+    const good = exp.every((b, i) => b === litOf(res.disp[i]));
+    s += good ? '<span class="ok">✓ correct</span>' : '<span class="bad">✗ not yet</span>';
+  } else s += '<span class="hint" style="margin:0">(don\'t care)</span>';
+  if (!res.stable) s += '<span class="warn">⚠ Feedback loop: the circuit never settles</span>';
+  $('#status').innerHTML = s;
+}
+
+function renderSel() {
+  const ids = [...selC];
+  const c = ids.length === 1 ? comp(ids[0]) : null;
+  const sig = JSON.stringify([ids, selW, c, S.bits]);
+  if (sig === lastSelSig) return;
+  lastSelSig = sig;
+  const el = $('#selpanel');
+  const actions = `<div class="row"><button class="btn" data-act="dup">Duplicate</button><button class="btn danger" data-act="del">Delete</button></div>`;
+  if (selW) {
+    el.innerHTML = `<p><b>Wire</b></p><p class="hint">Tip: drag a wire off its input pin to move it somewhere else.</p>
+      <button class="btn danger" data-act="del">Delete wire</button>`;
+    return;
+  }
+  if (!ids.length) { el.innerHTML = '<p class="hint">Click a part to select it. <b>Shift</b>+drag on the board to select several.</p>'; return; }
+  if (ids.length > 1) {
+    el.innerHTML = `<p><b>${ids.length} parts selected</b></p><p class="hint">Drag any of them to move them all together.</p>${actions}`;
+    return;
+  }
+  if (!c) { clearSel(); el.innerHTML = ''; return; }
+  if (isGate(c.type)) {
+    el.innerHTML = `<p><b>${c.type} gate</b></p>
+      <label class="row">Type <select id="selType">${GATE_TYPES.map(t => `<option${t === c.type ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+      ${c.type !== 'NOT' ? `<div class="row">Inputs <button class="btn sm" data-act="nminus" ${c.n <= 2 ? 'disabled' : ''}>−</button><b>${c.n}</b><button class="btn sm" data-act="nplus" ${c.n >= 4 ? 'disabled' : ''}>+</button></div>` : ''}
+      <p class="hint">${GATE_INFO[c.type]}</p>${actions}`;
+  } else if (c.type === 'CONST') {
+    el.innerHTML = `<p><b>Constant ${c.value}</b></p><p class="hint">Always outputs ${c.value}. Click it on the board to flip it.</p>${actions}`;
+  } else if (c.type === 'NOTE') {
+    el.innerHTML = `<p><b>Note</b></p><p class="hint">Double-click the note to edit it.</p>
+      <div class="row"><button class="btn" data-act="edit">Edit text</button><button class="btn danger" data-act="del">Delete</button></div>`;
+  } else if (c.type === 'CTRL') {
+    el.innerHTML = `<p><b>Controller</b></p><p class="hint">Has ${S.bits} output${S.bits > 1 ? 's' : ''}. A is the most significant bit. Change the number of outputs in the top bar.</p>`;
+  } else {
+    el.innerHTML = `<p><b>7-segment display</b></p><p class="hint">One input per segment: a = top, b = top right, c = bottom right, d = bottom, e = bottom left, f = top left, g = middle.</p>`;
+  }
+}
+
+function renderStats() {
+  const counts = {};
+  for (const c of S.comps) if (isGate(c.type)) counts[c.type] = (counts[c.type] || 0) + 1;
+  const tot = gateCount();
+  $('#stats').innerHTML = tot
+    ? GATE_TYPES.filter(t => counts[t]).map(t => `<div class="st-row"><span>${t}</span><span>× ${counts[t]}</span></div>`).join('') +
+      `<div class="st-row tot"><span>Total</span><span>${tot}</span></div>`
+    : '<p class="hint">No gates yet.</p>';
+}
+
+function compressRanges(list) {
+  const out = [];
+  for (let i = 0; i < list.length; i++) {
+    let j = i;
+    while (j + 1 < list.length && list[j + 1] === list[j] + 1) j++;
+    out.push(j - i >= 2 ? `${list[i]}–${list[j]}` : list.slice(i, j + 1).join(','));
+    i = j;
+  }
+  return out.join(',');
+}
+function mintermText(A, i) {
+  const mins = A.rows.filter(r => r.exp && levelOf(r.exp[i]) === 1).map(r => r.v);
+  const dcs = A.rows.filter(r => !r.exp).map(r => r.v);
+  const dc = dcs.length ? ` + d(${compressRanges(dcs)})` : '';
+  return `<b>${SEG[i]}</b> = ` + (mins.length ? `Σm(${compressRanges(mins)})${dc}` : `0${dc ? ` &nbsp;<span class="hint">d(${compressRanges(dcs)})</span>` : ''}`);
+}
+
+function renderAnalysis(idx) {
+  const A = analyze(idx);
+  const t = taskOf();
+  const rk = JSON.stringify([S.bits, S.mode, S.disp, S.allowed]);
+  if (rk !== revealKey) { revealKey = rk; revealed.clear(); }
+  // task card
+  $('#taskCard').innerHTML = `<div class="taskcard"><div class="tk-top"><span class="tk-label">${S.task === 'free' ? 'Mode' : 'Task'}</span>
+      <button class="btn" data-act="tasks">Change task</button></div>
+    <h4>${t.title}</h4><p>${t.desc}</p>
+    ${S.allowed ? `<p style="margin-top:6px"><b>Allowed gates:</b> ${S.allowed.join(', ')} (plus constants)</p>` : ''}
+    ${NOSOL ? '' : `<div class="row"><button class="btn" data-act="solution">💡 Solution suggestions</button></div>`}</div>`;
+  // summary
+  const gates = gateCount();
+  const allOk = A.cnt > 0 && A.ok === A.cnt && !A.disallowed.length && !A.unstable;
+  let sum = allOk
+    ? `<b class="stok">🎉 All ${A.cnt} digits correct!</b> You used ${gates} gate${gates === 1 ? '' : 's'}. Can you do it with fewer?`
+    : `<b>${A.ok} / ${A.cnt}</b> digits correct · <b>${A.segGood.filter(Boolean).length} / 7</b> segments done`;
+  if (A.disallowed.length) sum += `<div class="stbad" style="margin-top:4px">⚠ This task only allows ${S.allowed.join(', ')}. Replace: ${A.disallowed.join(', ')}.</div>`;
+  if (A.unstable) sum += `<div style="color:var(--warn);margin-top:4px">⚠ Some input values make the circuit oscillate (feedback loop).</div>`;
+  sum += `<div class="bar"><i style="width:${A.cnt ? (100 * A.ok / A.cnt) : 0}%"></i></div>`;
+  $('#summary').innerHTML = sum;
+  if (allOk && lastAllOk === false) toast(`🎉 Well done! Every digit is correct with ${gates} gate${gates === 1 ? '' : 's'}.`);
+  lastAllOk = allOk;
+
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  const body = $('#tabBody');
+  if (tab === 'table') body.innerHTML = renderTableTab(A);
+  else if (tab === 'kmap') body.innerHTML = renderKmapTab(A, idx);
+  else if (tab === 'solution' && !NOSOL) body.innerHTML = renderSolutionTab(A);
+  else body.innerHTML = renderExprTab(A, idx);
+}
+
+function renderTableTab(A) {
+  const N = S.bits, cur = curValue();
+  let body = '';
+  for (const r of A.rows) {
+    let cells = '';
+    for (let i = 0; i < 7; i++) {
+      const lvl = r.lvl[i], mine = lvl === null ? '·' : lvl;
+      if (!r.exp) { cells += `<td class="dc">${tableView === 'exp' ? 'X' : mine}</td>`; continue; }
+      const good = r.lit[i] === r.exp[i], el = levelOf(r.exp[i]);
+      cells += `<td class="${good ? 'ok' : 'bad'}" title="${SEG[i]}: should be ${el}, your circuit gives ${mine}">${tableView === 'exp' ? el : mine}</td>`;
+    }
+    body += `<tr data-v="${r.v}"${r.v === cur ? ' class="cur"' : ''}><td class="num">${r.v}</td>${r.ins.map(b => `<td class="bit">${b}</td>`).join('')}` +
+            `<td class="dig">${digitLabel(r.v)}</td><td class="yours" title="What your circuit shows">${miniDigit(r.lit)}</td>${cells}` +
+            `<td class="st ${r.good ? 'stok' : 'stbad'}">${r.exp ? (r.good ? '✓' : '✗') : ''}</td></tr>`;
+  }
+  const head = `<thead><tr><th>#</th>${[...Array(N)].map((_, i) => `<th>${LETTERS[i]}</th>`).join('')}<th title="Digit it should show">Want</th><th title="What your circuit shows">Yours</th>` +
+               SEG.split('').map((s, i) => `<th${A.segGood[i] ? ' class="sgood"' : ''}>${s}</th>`).join('') + '<th></th></tr></thead>';
+  return `<div class="tbhead"><span class="hint" style="margin:0">Cells show: </span><div class="segtoggle">
+      <button class="btn${tableView === 'exp' ? ' active' : ''}" data-tv="exp" title="What each segment pin should be">Expected</button>
+      <button class="btn${tableView === 'mine' ? ' active' : ''}" data-tv="mine" title="What your circuit outputs">My circuit</button></div></div>
+    <div class="tablewrap"><table class="tt">${head}<tbody>${body}</tbody></table></div>
+    <p class="legend"><span style="background:var(--ok);color:var(--ok-ink)">green</span> correct,
+      <span style="background:var(--bad);color:var(--bad-ink)">red</span> wrong,
+      <span style="background:var(--dc)">X</span> don't care, · not connected. Click a row to set the inputs.</p>
+    <div class="card"><b>Minterms</b> <span class="hint">(input values where the pin must be 1, plus don't-cares)</span>
+      ${SEG.split('').map((_, i) => `<div class="mt">${mintermText(A, i)}</div>`).join('')}</div>`;
+}
+
+function segPicker(A) {
+  return `<div class="segpick"><span class="hint" style="margin:0 4px 0 0">Segment:</span>${SEG.split('').map((s, i) =>
+    `<button class="btn${i === kmapSeg ? ' active' : ''}${A.segGood[i] ? ' g' : ''}" data-seg="${i}">${s}</button>`).join('')}</div>`;
+}
+
+function renderKmapTab(A, idx) {
+  const N = S.bits, i = kmapSeg, cur = curValue();
+  let h = segPicker(A);
+  if (N > 4) {
+    return h + `<p class="hint">Karnaugh maps are shown for 1–4 bits. With ${N} bits, use the truth table and the minterm list below.</p>
+      <div class="card"><div class="mt">${mintermText(A, i)}</div></div>`;
+  }
+  const rv = Math.floor(N / 2), cv = N - rv;
+  const gray = k => k === 0 ? [0] : k === 1 ? [0, 1] : [0, 1, 3, 2];
+  const bin = (x, k) => k ? x.toString(2).padStart(k, '0') : '';
+  const rl = LETTERS.slice(0, rv), cl = LETTERS.slice(rv, N);
+  h += `<div class="kmapwrap"><table class="kmap"><tr><th class="corner">${rv ? rl + ' ╲ ' : ''}${cl}</th>${gray(cv).map(c => `<th>${bin(c, cv)}</th>`).join('')}</tr>`;
+  for (const r of gray(rv)) {
+    h += `<tr><th>${bin(r, rv)}</th>`;
+    for (const c of gray(cv)) {
+      const v = (r << cv) | c, row = A.rows[v];
+      let cls, txt, tip;
+      if (!row.exp) { cls = 'dc'; txt = 'X'; tip = 'don\'t care'; }
+      else {
+        const el = levelOf(row.exp[i]);
+        txt = el; cls = row.lit[i] === row.exp[i] ? 'ok' : 'bad';
+        tip = `should be ${el}, your circuit gives ${row.lvl[i] === null ? 'nothing (not connected)' : row.lvl[i]}`;
+      }
+      h += `<td class="${cls}${v === cur ? ' cur' : ''}" data-v="${v}" title="Input ${v}: ${tip}"><b>${txt}</b><small>${v}</small></td>`;
+    }
+    h += '</tr>';
+  }
+  h += '</table></div>';
+  const ex = buildExprs(idx)[i];
+  h += `<div class="card"><div class="mt">${mintermText(A, i)}</div>
+      <div style="margin-top:6px">Your circuit: <span class="math"><b>${SEG[i]}</b> = ${ex || '<span class="hint">not connected</span>'}</span></div></div>
+    <p class="hint">The value shown is what pin <b>${SEG[i]}</b> must be. Circle groups of 1s in rectangles of 1, 2, 4 or 8 cells (the map wraps around its edges). X cells may be included if that makes a group bigger. Each group becomes one AND term, and the groups are ORed together. Colours show whether your circuit already matches.</p>`;
+  if (!NOSOL) {
+    if (revealed.has(i)) {
+      const sol = solveAll(A)[i];
+      h += `<div class="card"><b>Solution groups</b> <span class="hint">(${sol.pos ? 'groups of 0s' : 'groups of 1s'} — hover or tap a term to see its cells)</span>
+        <div class="chips">${sol.terms.length
+          ? sol.terms.map(t => `<span class="chip" data-cells="${termCells(t).join(',')}"><span class="math">${termHtml(t, sol.pos)}</span></span>`).join('')
+          : `<span class="hint">No groups needed: the pin is always ${sol.pos ? 1 : 0}.</span>`}</div>
+        <div style="margin-top:8px">→ <span class="math"><b>${SEG[i]}</b> = ${solHtml(sol)}</span></div></div>`;
+    } else {
+      h += `<div class="row"><button class="btn" data-reveal="${i}">💡 Show the solution for segment ${SEG[i]}</button></div>`;
+    }
+  }
+  return h;
+}
+
+function renderExprTab(A, idx) {
+  const ex = buildExprs(idx);
+  return `<p class="hint">The formula your wiring computes for each display pin. A bar over something means NOT.</p>` +
+    SEG.split('').map((s, i) => `<div class="exrow"><span class="let ${A.segGood[i] ? 'g' : 'b'}">${s}</span>` +
+      `<span class="math">${ex[i] || '<span class="hint" style="font-family:inherit;font-size:13px">not connected</span>'}</span>` +
+      `<span class="mk ${A.segGood[i] ? 'stok' : 'stbad'}">${A.segGood[i] ? '✓' : '✗'}</span></div>`).join('');
+}
+
+// ---------- solution suggestions ----------
+const popcount = x => { let c = 0; while (x) { x &= x - 1; c++; } return c; };
+// Quine–McCluskey: minimal sum of products covering `ones`, free to use `dcs`.
+// A term {v, m}: m = bits that are eliminated, v = values of the remaining bits.
+function minimize(N, ones, dcs) {
+  if (!ones.length) return [];
+  let cur = new Map([...ones, ...dcs].map(x => [x + ':0', {v: x, m: 0}]));
+  const primes = [];
+  while (cur.size) {
+    const arr = [...cur.values()], next = new Map(), used = new Set();
+    for (let i = 0; i < arr.length; i++) for (let j = i + 1; j < arr.length; j++) {
+      const a = arr[i], b = arr[j], d = a.v ^ b.v;
+      if (a.m !== b.m || !d || (d & (d - 1))) continue;
+      const v = a.v & ~d, m = a.m | d;
+      if (!next.has(v + ':' + m)) next.set(v + ':' + m, {v, m});
+      used.add(a); used.add(b);
+    }
+    for (const a of arr) if (!used.has(a)) primes.push(a);
+    cur = next;
+  }
+  const P = primes.map(p => ({v: p.v, m: p.m, lits: N - popcount(p.m), cov: new Set(ones.filter(x => (x & ~p.m) === p.v))}))
+                  .filter(p => p.cov.size);
+  // exact cover search (fewest terms, then fewest literals), bounded
+  let best = null, bestCost = Infinity, steps = 0;
+  (function search(unc, sel, cost) {
+    if (++steps > 100000 || cost + (unc.length ? 100 : 0) >= bestCost) return;
+    if (!unc.length) { best = sel.slice(); bestCost = cost; return; }
+    let opts = null;
+    for (const x of unc) {
+      const o = P.filter(p => p.cov.has(x));
+      if (!opts || o.length < opts.length) opts = o;
+      if (opts.length === 1) break;
+    }
+    opts.sort((a, b) => b.cov.size - a.cov.size || a.lits - b.lits);
+    for (const p of opts) { sel.push(p); search(unc.filter(x => !p.cov.has(x)), sel, cost + 100 + p.lits); sel.pop(); }
+  })(ones.slice(), [], 0);
+  return best.map(p => ({v: p.v, m: p.m})).sort((a, b) => popcount(b.m) - popcount(a.m) || a.v - b.v);
+}
+function solutionFamily() {
+  if (S.allowed && S.allowed.length === 1 && S.allowed[0] === 'NAND') return 'nand';
+  if (S.allowed && S.allowed.length === 1 && S.allowed[0] === 'NOR') return 'nor';
+  return 'std';
+}
+// per segment: minimal SOP of the pin level (or POS via the 0s for NOR-only tasks)
+function solveAll(A) {
+  const pos = solutionFamily() === 'nor';
+  return SEG.split('').map((_, i) => {
+    const ones = [], zeros = [], dcs = [];
+    for (const r of A.rows) { if (!r.exp) dcs.push(r.v); else (levelOf(r.exp[i]) ? ones : zeros).push(r.v); }
+    return {terms: minimize(S.bits, pos ? zeros : ones, dcs), pos};
+  });
+}
+function termCells(t) {
+  const out = [];
+  for (let x = 0; x < (1 << S.bits); x++) if ((x & ~t.m) === t.v) out.push(x);
+  return out;
+}
+function termHtml(t, pos) {
+  const N = S.bits, l = [];
+  for (let j = 0; j < N; j++) {
+    const b = 1 << (N - 1 - j);
+    if (t.m & b) continue;
+    const on = !!(t.v & b) !== pos;
+    l.push(on ? `<i>${LETTERS[j]}</i>` : `<span class="ov"><i>${LETTERS[j]}</i></span>`);
+  }
+  if (!pos) return l.length ? l.join('·') : '1';
+  if (!l.length) return '0';
+  return l.length > 1 ? `(${l.join(' + ')})` : l[0];
+}
+function solHtml(sol) {
+  if (!sol.terms.length) return sol.pos ? '1' : '0';
+  return sol.terms.map(t => termHtml(t, sol.pos)).join(sol.pos ? '' : ' + ');
+}
+// gate network (shared terms), converted to NAND-only / NOR-only when the task demands it
+function solutionDag(sols) {
+  const table = new Map(), N = S.bits, fam = solutionFamily();
+  const node = (op, args = [], val = null) => {
+    const key = op + ':' + val + ':' + args.map(a => a.id).join(',');
+    let n = table.get(key);
+    if (!n) { n = {id: table.size + 1, op, args, val}; table.set(key, n); }
+    return n;
+  };
+  const C = v => node('const', [], v), V = j => node('var', [], j);
+  const NOT = x => x.op === 'NOT' ? x.args[0] : x.op === 'const' ? C(1 - x.val) : node('NOT', [x]);
+  const group = (op, xs, empty) => {
+    xs = [...new Map(xs.map(x => [x.id, x])).values()].sort((a, b) => a.id - b.id);
+    if (!xs.length) return C(empty);
+    if (xs.length === 1) return xs[0];
+    if (xs.length > 4) {
+      const g = [];
+      for (let i = 0; i < xs.length; i += 4) g.push(group(op, xs.slice(i, i + 4), empty));
+      return group(op, g, empty);
+    }
+    return node(op, xs);
+  };
+  const lits = (t, neg) => {
+    const o = [];
+    for (let j = 0; j < N; j++) { const b = 1 << (N - 1 - j); if (!(t.m & b)) o.push(!!(t.v & b) !== neg ? V(j) : NOT(V(j))); }
+    return o;
+  };
+  const roots = sols.map(sol => sol.pos
+    ? group('AND', sol.terms.map(t => group('OR', lits(t, true), 0)), 1)
+    : group('OR', sol.terms.map(t => group('AND', lits(t, false), 1)), 0));
+  if (fam === 'std') return roots;
+  const G = fam === 'nand' ? 'NAND' : 'NOR', same = fam === 'nand' ? 'AND' : 'OR';
+  const inv = y => {
+    if (y.notOf) return y.notOf;
+    if (y.op === 'const') return C(1 - y.val);
+    const r = node(G, [y, y]);
+    r.notOf = y;
+    return r;
+  };
+  const memo = new Map();
+  const T = n => {
+    if (n.op === 'var' || n.op === 'const') return n;
+    if (memo.has(n.id)) return memo.get(n.id);
+    let r;
+    if (n.op === 'NOT') r = inv(T(n.args[0]));
+    else if (n.op === same) r = inv(node(G, n.args.map(T)));
+    else r = node(G, n.args.map(x => x.op === 'NOT' ? T(x.args[0]) : inv(T(x))));
+    memo.set(n.id, r);
+    return r;
+  };
+  return roots.map(T);
+}
+const isGateNode = n => n.op !== 'var' && n.op !== 'const';
+function collectGates(roots) {
+  const gates = [], seen = new Set();
+  const visit = n => {
+    if (!isGateNode(n) || seen.has(n.id)) return;
+    seen.add(n.id);
+    n.args.forEach(visit);
+    n.level = 1 + Math.max(0, ...n.args.map(a => isGateNode(a) ? a.level : 0));
+    gates.push(n);
+  };
+  roots.forEach(visit);
+  return gates;
+}
+function buildSolution() {
+  const roots = solutionDag(solveAll(analyze(buildIndex())));
+  const gates = collectGates(roots);
+  // order each column by the segment the gate feeds, to keep wires tidy
+  gates.forEach(g => { g.rank = Infinity; });
+  roots.forEach((r, i) => { if (isGateNode(r)) r.rank = Math.min(r.rank, i); });
+  [...gates].sort((a, b) => b.level - a.level)
+    .forEach(g => g.args.forEach((a, k) => { if (isGateNode(a)) a.rank = Math.min(a.rank, g.rank + k * 0.01); }));
+  const maxL = Math.max(0, ...gates.map(g => g.level));
+  const cols = Array.from({length: maxL + 1}, () => []);
+  gates.forEach(g => cols[g.level].push(g));
+  const hOf = g => g.op === 'NOT' ? 40 : Math.max(40, g.args.length * 20);
+  const colH = cols.map(c => c.reduce((s, g) => s + hOf(g) + 30, 0));
+  const ctrlH = 50 + S.bits * 40, maxH = Math.max(ctrlH, 264, ...colH);
+  const X0 = 270, DX = 170, TOP = 40;
+  const idOf = new Map(), comps = [];
+  cols.forEach((col, L) => {
+    col.sort((a, b) => a.rank - b.rank || a.id - b.id);
+    let y = TOP + (maxH - colH[L]) / 2;
+    for (const g of col) {
+      const c = {id: uid(), type: g.op, x: X0 + (L - 1) * DX, y: snap(y)};
+      if (g.op !== 'NOT') c.n = g.args.length;
+      comps.push(c);
+      idOf.set(g.id, c.id);
+      y += hOf(g) + 30;
+    }
+  });
+  const dispX = maxL ? X0 + (maxL - 1) * DX + 240 : 420, dispY = TOP + snap((maxH - 264) / 2);
+  const constIds = {};
+  const srcOf = n => {
+    if (n.op === 'var') return {c: 'ctrl', p: n.val};
+    if (n.op === 'const') {
+      if (!constIds[n.val]) {
+        const c = {id: uid(), type: 'CONST', value: n.val, x: dispX - 130, y: dispY + 290 + Object.keys(constIds).length * 50};
+        comps.push(c);
+        constIds[n.val] = c.id;
+      }
+      return {c: constIds[n.val], p: 0};
+    }
+    return {c: idOf.get(n.id), p: 0};
+  };
+  const wires = [];
+  for (const g of gates) g.args.forEach((a, k) => wires.push({id: uid(), from: srcOf(a), to: {c: idOf.get(g.id), p: k}}));
+  roots.forEach((r, i) => wires.push({id: uid(), from: srcOf(r), to: {c: 'disp', p: i}}));
+  stopPlay();
+  pushUndo();
+  const ctrl = comp('ctrl'), disp = comp('disp');
+  ctrl.x = 40; ctrl.y = TOP + snap((maxH - ctrlH) / 2);
+  disp.x = dispX; disp.y = dispY;
+  S.comps = [ctrl, disp, ...comps];
+  S.wires = wires;
+  lastAllOk = null;
+  clearSel(); commit(); fit();
+  toast(`Built a solution with ${gates.length} gate${gates.length === 1 ? '' : 's'}. Can you beat it?`);
+}
+function renderSolutionTab(A) {
+  const sols = solveAll(A), fam = solutionFamily();
+  const gates = collectGates(solutionDag(sols));
+  const counts = {};
+  gates.forEach(g => { counts[g.op] = (counts[g.op] || 0) + 1; });
+  const countTxt = GATE_TYPES.filter(t => counts[t]).map(t => `${counts[t]} ${t}`).join(', ');
+  let h = `<div class="card">💡 <b>Try it yourself first!</b> Reveal one segment at a time, and use the Karnaugh map to see <i>why</i> the answer works.</div>`;
+  if (fam === 'nor') h += `<p class="hint">NOR only: these answers are written as a <b>product of sums</b> (groups of 0s in the K-map). That maps directly onto NOR → NOR. NOT A is a NOR gate with both inputs on A.</p>`;
+  else if (fam === 'nand') h += `<p class="hint">NAND only: a <b>sum of products</b> maps directly onto NAND → NAND. NOT A is a NAND gate with both inputs on A.</p>`;
+  h += SEG.split('').map((s, i) => `<div class="exrow sol"><span class="let">${s}</span>` +
+    (revealed.has(i)
+      ? `<span class="math">${solHtml(sols[i])}</span><button class="btn sm" data-kmap="${i}" title="See the groups in the Karnaugh map">K-map</button>`
+      : `<span class="hidden-sol">• • •</span><button class="btn sm" data-reveal="${i}">Show</button>`) + `</div>`).join('');
+  h += `<div class="row"><button class="btn" data-act="revealall">Show all</button><button class="btn" data-act="hideall">Hide all</button></div>`;
+  h += `<div class="card"><b>Build the whole solution</b>
+    <p class="hint">A generated circuit with <b>${gates.length}</b> gate${gates.length === 1 ? '' : 's'}${countTxt ? ` (${countTxt})` : ''}. It replaces your board, but you can get your work back with Undo.</p>
+    <button class="btn primary" data-act="buildsol">Build the solution on the board</button></div>
+    <p class="hint">Each segment uses a minimal ${fam === 'nor' ? 'product of sums' : 'sum of products'}, and terms are shared between segments. A clever circuit can sometimes use even fewer gates. Can you beat it?</p>`;
+  return h;
+}
+function highlightCells(list) {
+  const set = new Set(list ? list.split(',') : []);
+  document.querySelectorAll('#tabBody .kmap td[data-v]').forEach(td => td.classList.toggle('hl', set.has(td.dataset.v)));
+  document.querySelectorAll('#tabBody .chip').forEach(ch => ch.classList.toggle('on', !!list && ch.dataset.cells === list));
+}
+
+function toast(msg) {
+  const t = $('#toast');
+  t.innerHTML = msg;
+  t.classList.add('show');
+  clearTimeout(toast.tm);
+  toast.tm = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ---------- editing ----------
+function toWorld(e) {
+  const r = svg.getBoundingClientRect();
+  return {x: (e.clientX - r.left - view.tx) / view.k, y: (e.clientY - r.top - view.ty) / view.k};
+}
+function nearestPin(kind, x, y) {
+  let best = null, bd = Math.pow(Math.max(14, 14 / view.k), 2);
+  for (const c of S.comps) {
+    (kind === 'in' ? inPinsLocal(c) : outPinsLocal(c)).forEach((pt, i) => {
+      const d = (c.x + pt.x - x) ** 2 + (c.y + pt.y - y) ** 2;
+      if (d < bd) { bd = d; best = c.id + '|' + kind + '|' + i; }
+    });
+  }
+  return best;
+}
+function addComp(type, x, y) {
+  if (!allowedType(type)) { toast(`Only ${S.allowed.join(', ')} gates are allowed in this task.`); return; }
+  pushUndo();
+  const c = {id: uid(), type, x: snap(x), y: snap(y)};
+  if (isGate(type) && type !== 'NOT') c.n = 2;
+  if (type === 'CONST') c.value = 1;
+  if (type === 'NOTE') c.text = 'Double-click to write a note';
+  S.comps.push(c);
+  selectOnly(c.id);
+  commit();
+}
+function deleteSelected() {
+  if (selW) {
+    pushUndo();
+    S.wires = S.wires.filter(w => w.id !== selW);
+  } else {
+    const ids = new Set([...selC].filter(id => { const c = comp(id); return c && !fixed(c); }));
+    if (!ids.size) return;
+    pushUndo();
+    S.comps = S.comps.filter(c => !ids.has(c.id));
+    S.wires = S.wires.filter(w => !ids.has(w.from.c) && !ids.has(w.to.c));
+  }
+  clearSel();
+  commit();
+}
+function copySel() {
+  const ids = new Set([...selC].filter(id => { const c = comp(id); return c && !fixed(c); }));
+  if (!ids.size) return false;
+  clip = {comps: S.comps.filter(c => ids.has(c.id)).map(c => ({...c})),
+          wires: S.wires.filter(w => ids.has(w.from.c) && ids.has(w.to.c)).map(w => JSON.parse(JSON.stringify(w)))};
+  pasteN = 0;
+  return true;
+}
+function paste() {
+  if (!clip) return;
+  pasteN++;
+  pushUndo();
+  const map = new Map(), off = 30 * pasteN;
+  for (const c of clip.comps) {
+    const nc = {...c, id: uid(), x: c.x + off, y: c.y + off};
+    map.set(c.id, nc.id);
+    S.comps.push(nc);
+  }
+  for (const w of clip.wires) S.wires.push({id: uid(), from: {c: map.get(w.from.c), p: w.from.p}, to: {c: map.get(w.to.c), p: w.to.p}});
+  selC = new Set(map.values());
+  selW = null;
+  commit();
+}
+function duplicateSelected() { if (copySel()) paste(); }
+function editNote(c) {
+  const t = prompt('Note text:', c.text || '');
+  if (t === null) return;
+  pushUndo();
+  c.text = t.slice(0, 500);
+  commit();
+}
+function setGateInputs(c, n) {
+  n = clamp(n, 2, 4);
+  if (n === c.n) return;
+  pushUndo();
+  c.n = n;
+  S.wires = S.wires.filter(w => !(w.to.c === c.id && w.to.p >= n));
+  commit();
+}
+function setGateType(c, t) {
+  if (!isGate(t) || t === c.type) return;
+  pushUndo();
+  c.type = t;
+  if (t === 'NOT') { delete c.n; S.wires = S.wires.filter(w => !(w.to.c === c.id && w.to.p >= 1)); }
+  else if (!c.n) c.n = 2;
+  commit();
+}
+function setValue(v) {
+  const rows = 1 << S.bits;
+  S.inputs = toInputs(((v % rows) + rows) % rows);
+  commit();
+}
+function applySettings(bits, mode, disp) {
+  S.bits = bits;
+  S.mode = mode;
+  S.disp = disp;
+  S.inputs = Array(bits).fill(0);
+  S.wires = S.wires.filter(w => !(w.from.c === 'ctrl' && w.from.p >= bits));
+}
+function manualSetting(fn) {
+  stopPlay();
+  pushUndo();
+  fn();
+  if (S.task !== 'free') { S.task = 'free'; S.allowed = null; }
+  commit();
+}
+
+// ---------- pointer on the board ----------
+svg.addEventListener('pointerdown', e => {
+  if (e.button === 2) return;
+  const p = toWorld(e);
+  svg.setPointerCapture(e.pointerId);
+  if (e.button === 1) { drag = {kind: 'pan', sx: e.clientX, sy: e.clientY, tx: view.tx, ty: view.ty}; svg.classList.add('panning'); return; }
+
+  const pinEl = e.target.closest('[data-pin]');
+  if (pinEl) {
+    const [c, kind, i] = pinEl.dataset.pin.split('|');
+    const pi = +i;
+    if (kind === 'in') {
+      const w = S.wires.find(w => w.to.c === c && w.to.p === pi);
+      if (w) { // pick the wire up from this input
+        pushUndo();
+        S.wires = S.wires.filter(x => x !== w);
+        drag = {kind: 'wire', from: {c: w.from.c, kind: 'out', p: w.from.p}, x: p.x, y: p.y, undoPushed: true, hover: null};
+        render();
+        return;
+      }
+    }
+    drag = {kind: 'wire', from: {c, kind, p: pi}, x: p.x, y: p.y, hover: null};
+    render();
+    return;
+  }
+  const wireEl = e.target.closest('[data-wire]');
+  if (wireEl) { selC = new Set(); selW = wireEl.dataset.wire; drag = null; render(); return; }
+  const compEl = e.target.closest('[data-comp]');
+  if (compEl) {
+    const id = compEl.dataset.comp;
+    selW = null;
+    if (e.shiftKey) {
+      if (selC.has(id)) selC.delete(id); else selC.add(id);
+      render();
+      return;
+    }
+    if (!selC.has(id)) selectOnly(id);
+    const tg = e.target.closest('[data-toggle]');
+    const starts = new Map([...selC].map(sid => { const c = comp(sid); return [sid, {x: c.x, y: c.y}]; }));
+    drag = {kind: 'move', id, starts, p0: p, sx: e.clientX, sy: e.clientY, moved: false, toggle: tg ? +tg.dataset.toggle : null};
+    render();
+    return;
+  }
+  if (e.shiftKey) {
+    drag = {kind: 'box', x0: p.x, y0: p.y, x1: p.x, y1: p.y, base: new Set(selC)};
+    selW = null;
+    return;
+  }
+  clearSel();
+  drag = {kind: 'pan', sx: e.clientX, sy: e.clientY, tx: view.tx, ty: view.ty};
+  svg.classList.add('panning');
+  render();
+});
+
+svg.addEventListener('pointermove', e => {
+  if (!drag) return;
+  if (drag.kind === 'pan') {
+    view.tx = drag.tx + e.clientX - drag.sx;
+    view.ty = drag.ty + e.clientY - drag.sy;
+    applyView();
+  } else if (drag.kind === 'move') {
+    if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return;
+    if (!drag.moved) { drag.moved = true; pushUndo(); }
+    const p = toWorld(e), dx = snap(p.x - drag.p0.x), dy = snap(p.y - drag.p0.y);
+    for (const [id, st] of drag.starts) { const c = comp(id); if (c) { c.x = st.x + dx; c.y = st.y + dy; } }
+    render();
+  } else if (drag.kind === 'wire') {
+    const p = toWorld(e);
+    drag.x = p.x; drag.y = p.y;
+    drag.hover = nearestPin(drag.from.kind === 'out' ? 'in' : 'out', p.x, p.y);
+    render();
+  } else if (drag.kind === 'box') {
+    const p = toWorld(e);
+    drag.x1 = p.x; drag.y1 = p.y;
+    const x0 = Math.min(drag.x0, drag.x1), x1 = Math.max(drag.x0, drag.x1), y0 = Math.min(drag.y0, drag.y1), y1 = Math.max(drag.y0, drag.y1);
+    selC = new Set(drag.base);
+    for (const c of S.comps) {
+      const b = compBox(c);
+      if (b.x1 >= x0 && b.x0 <= x1 && b.y1 >= y0 && b.y0 <= y1) selC.add(c.id);
+    }
+    render();
+  }
+});
+
+function endDrag(e, cancelled) {
+  if (!drag) return;
+  const d = drag;
+  drag = null;
+  svg.classList.remove('panning');
+  if (cancelled) { if (d.undoPushed || d.moved) commit(); else render(); return; }
+  if (d.kind === 'move') {
+    const c = comp(d.id);
+    if (!d.moved && d.toggle !== null) S.inputs[d.toggle] ^= 1;
+    else if (!d.moved && c && c.type === 'CONST') { pushUndo(); c.value = c.value ? 0 : 1; }
+    commit();
+  } else if (d.kind === 'wire') {
+    const p = toWorld(e);
+    const tk = nearestPin(d.from.kind === 'out' ? 'in' : 'out', p.x, p.y);
+    if (tk) {
+      const [c, , pp] = tk.split('|');
+      const t = {c, p: +pp}, f = {c: d.from.c, p: d.from.p};
+      const from = d.from.kind === 'out' ? f : t, to = d.from.kind === 'out' ? t : f;
+      if (!d.undoPushed) pushUndo();
+      S.wires = S.wires.filter(w => !(w.to.c === to.c && w.to.p === to.p));
+      S.wires.push({id: uid(), from, to});
+    }
+    commit();
+  } else render();
+}
+svg.addEventListener('pointerup', e => endDrag(e, false));
+svg.addEventListener('pointercancel', e => endDrag(e, true));
+
+svg.addEventListener('dblclick', e => {
+  const el = e.target.closest('[data-comp]');
+  const c = el && comp(el.dataset.comp);
+  if (c && c.type === 'NOTE') editNote(c);
+});
+svg.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  const w = e.target.closest('[data-wire]'), c = e.target.closest('[data-comp]');
+  if (w) { selC = new Set(); selW = w.dataset.wire; }
+  else if (c) selectOnly(c.dataset.comp);
+  else return;
+  deleteSelected();
+});
+svg.addEventListener('wheel', e => {
+  e.preventDefault();
+  zoomAt(view.k * Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY);
+}, {passive: false});
+
+function zoomAt(k2, cx, cy) {
+  const r = svg.getBoundingClientRect();
+  if (cx === undefined) { cx = r.left + r.width / 2; cy = r.top + r.height / 2; }
+  k2 = clamp(k2, 0.25, 3);
+  const mx = cx - r.left, my = cy - r.top;
+  view.tx = mx - (mx - view.tx) * k2 / view.k;
+  view.ty = my - (my - view.ty) * k2 / view.k;
+  view.k = k2;
+  applyView();
+}
+function fit() {
+  const r = svg.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const b = boundsOf(S.comps), pad = 50;
+  const k = clamp(Math.min((r.width - pad * 2) / (b.x1 - b.x0), (r.height - pad * 2 - 40) / (b.y1 - b.y0)), 0.25, 1.4);
+  view.k = k;
+  view.tx = (r.width - (b.x1 - b.x0) * k) / 2 - b.x0 * k;
+  view.ty = (r.height - 40 - (b.y1 - b.y0) * k) / 2 - b.y0 * k;
+  applyView();
+}
+
+// ---------- palette ----------
+function paletteIcon(t) {
+  if (t === 'CONST') return `<svg viewBox="-4 -4 72 48" width="58" height="26"><rect class="box" x="0" y="0" width="40" height="40" rx="6"/><text class="cval" x="20" y="27" text-anchor="middle">1</text><line class="stub" x1="40" y1="20" x2="60" y2="20"/></svg>`;
+  if (t === 'NOTE') return `<svg viewBox="-4 -4 72 48" width="58" height="26"><rect class="note" x="4" y="2" width="56" height="36" rx="4"/><text class="notetxt" x="32" y="25" text-anchor="middle" style="font-size:15px;font-weight:700">Aa</text></svg>`;
+  return `<svg viewBox="-24 -4 118 48" width="64" height="26">${gateShape(t, t === 'NOT' ? 1 : 2, 40)}</svg>`;
+}
+const PAL_TYPES = [...GATE_TYPES, 'CONST', 'NOTE'];
+const PAL_NAME = {CONST: 'CONST 0/1', NOTE: 'NOTE'};
+const palEl = $('#palette');
+palEl.innerHTML = PAL_TYPES.map(t =>
+  `<div class="pal" data-type="${t}" title="${t === 'CONST' ? 'Constant 0 or 1' : t === 'NOTE' ? 'Text note' : t + ' gate'}">${paletteIcon(t)}<b>${PAL_NAME[t] || t}</b></div>`).join('');
+const ghost = $('#ghost');
+palEl.addEventListener('pointerdown', e => {
+  const item = e.target.closest('.pal');
+  if (!item) return;
+  e.preventDefault();
+  if (!allowedType(item.dataset.type)) { toast(`Only ${S.allowed.join(', ')} gates are allowed in this task.`); return; }
+  pal = {type: item.dataset.type, sx: e.clientX, sy: e.clientY, moved: false};
+  ghost.innerHTML = paletteIcon(pal.type);
+});
+document.addEventListener('pointermove', e => {
+  if (!pal) return;
+  if (!pal.moved && Math.hypot(e.clientX - pal.sx, e.clientY - pal.sy) > 5) { pal.moved = true; ghost.style.display = 'block'; }
+  if (pal.moved) { ghost.style.left = (e.clientX - 32) + 'px'; ghost.style.top = (e.clientY - 13) + 'px'; }
+});
+document.addEventListener('pointerup', e => {
+  if (!pal) return;
+  const p0 = pal;
+  pal = null;
+  ghost.style.display = 'none';
+  const r = svg.getBoundingClientRect();
+  const h = isGate(p0.type) ? gateGeom({type: p0.type, n: 2}).h : 40;
+  if (p0.moved) {
+    if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+      const w = toWorld(e);
+      addComp(p0.type, w.x - 30, w.y - h / 2);
+    }
+  } else {
+    const off = (addCount++ % 6) * 20;
+    addComp(p0.type, (r.width / 2 - view.tx) / view.k - 30 + off, (r.height / 2 - view.ty) / view.k - h / 2 + off);
+  }
+});
+
+// ---------- panels & toolbar ----------
+$('#selpanel').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]');
+  if (!b) return;
+  const c = selC.size === 1 ? comp([...selC][0]) : null;
+  switch (b.dataset.act) {
+    case 'del': deleteSelected(); break;
+    case 'dup': duplicateSelected(); break;
+    case 'edit': if (c) editNote(c); break;
+    case 'nplus': if (c) setGateInputs(c, c.n + 1); break;
+    case 'nminus': if (c) setGateInputs(c, c.n - 1); break;
+  }
+});
+$('#selpanel').addEventListener('change', e => {
+  if (e.target.id === 'selType' && selC.size === 1) { const c = comp([...selC][0]); if (c) setGateType(c, e.target.value); }
+});
+document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; render(); }));
+$('#tabBody').addEventListener('click', e => {
+  const el = e.target.closest('[data-tv],[data-seg],[data-reveal],[data-kmap],[data-act],[data-cells],[data-v]');
+  if (!el) return;
+  const d = el.dataset;
+  if (d.tv) { tableView = d.tv; render(); }
+  else if (d.seg !== undefined) { kmapSeg = +d.seg; render(); }
+  else if (d.reveal !== undefined) { revealed.add(+d.reveal); render(); }
+  else if (d.kmap !== undefined) { kmapSeg = +d.kmap; tab = 'kmap'; render(); }
+  else if (d.cells !== undefined) highlightCells(d.cells);
+  else if (d.act === 'revealall') { SEG.split('').forEach((_, i) => revealed.add(i)); render(); }
+  else if (d.act === 'hideall') { revealed.clear(); render(); }
+  else if (d.act === 'buildsol') {
+    if (S.comps.some(c => !fixed(c)) && !confirm('Replace your board with the suggested solution? (You can get your work back with Undo.)')) return;
+    buildSolution();
+  }
+  else if (d.v !== undefined) { stopPlay(); setValue(+d.v); }
+});
+$('#tabBody').addEventListener('mouseover', e => {
+  const c = e.target.closest('[data-cells]');
+  if (c) highlightCells(c.dataset.cells);
+});
+$('#tabBody').addEventListener('mouseout', e => {
+  const c = e.target.closest('[data-cells]');
+  if (c && !c.contains(e.relatedTarget)) highlightCells('');
+});
+$('#taskCard').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]');
+  if (!b) return;
+  if (b.dataset.act === 'tasks') openTasks();
+  if (b.dataset.act === 'solution') { tab = 'solution'; render(); }
+});
+
+function syncControls() {
+  $('#bits').value = S.bits;
+  $('#mode').value = S.mode;
+  $('#disptype').value = S.disp;
+}
+$('#bits').addEventListener('change', e => manualSetting(() => applySettings(+e.target.value, S.mode, S.disp)));
+$('#mode').addEventListener('change', e => manualSetting(() => { S.mode = e.target.value; }));
+$('#disptype').addEventListener('change', e => manualSetting(() => { S.disp = e.target.value; }));
+
+function stopPlay() {
+  if (playTimer) { clearInterval(playTimer); playTimer = null; }
+  $('#play').textContent = '▶ Count';
+  $('#play').classList.remove('active');
+}
+$('#play').addEventListener('click', () => {
+  if (playTimer) { stopPlay(); return; }
+  playTimer = setInterval(() => setValue(curValue() + 1), 900);
+  $('#play').textContent = '⏸ Stop';
+  $('#play').classList.add('active');
+});
+$('#stepUp').addEventListener('click', () => { stopPlay(); setValue(curValue() + 1); });
+$('#stepDown').addEventListener('click', () => { stopPlay(); setValue(curValue() - 1); });
+$('#undo').addEventListener('click', undo);
+$('#redo').addEventListener('click', redo);
+$('#fit').addEventListener('click', fit);
+$('#zoomIn').addEventListener('click', () => zoomAt(view.k * 1.2));
+$('#zoomOut').addEventListener('click', () => zoomAt(view.k / 1.2));
+$('#help').addEventListener('click', () => $('#helpDlg').showModal());
+$('#taskBtn').addEventListener('click', openTasks);
+$('#toggleTable').addEventListener('click', () => {
+  const rp = $('#rightPanel');
+  rp.classList.toggle('collapsed');
+  $('#toggleTable').classList.toggle('active', !rp.classList.contains('collapsed'));
+});
+$('#clear').addEventListener('click', () => {
+  if (!S.comps.some(c => !fixed(c)) && !S.wires.length) return;
+  if (!confirm('Remove all gates, wires and notes? (You can undo this.)')) return;
+  pushUndo();
+  S.comps = S.comps.filter(fixed);
+  S.wires = [];
+  clearSel();
+  commit();
+});
+
+function download(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+$('#saveFile').addEventListener('click', () => {
+  download(new Blob([JSON.stringify(S, null, 1)], {type: 'application/json'}), `7seg-circuit-${S.bits}bit.json`);
+});
+$('#open').addEventListener('click', () => $('#fileInput').click());
+$('#fileInput').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  f.text().then(txt => {
+    let s = null;
+    try { s = normalize(JSON.parse(txt)); } catch (err) {}
+    if (!s) { alert('That file is not a valid circuit.'); return; }
+    stopPlay(); pushUndo(); S = s; clearSel(); syncControls(); commit(); fit();
+  });
+  e.target.value = '';
+});
+
+// picture of the circuit, e.g. for handing in
+$('#image').addEventListener('click', () => {
+  const keepC = selC, keepW = selW;
+  clearSel();
+  render();
+  const b = boundsOf(S.comps), pad = 30, head = 46;
+  const x0 = b.x0 - pad, y0 = b.y0 - pad - head, w = b.x1 - b.x0 + pad * 2, h = b.y1 - b.y0 + pad * 2 + head;
+  const cs = getComputedStyle(document.documentElement);
+  const vars = ['--panel','--ink','--muted','--line','--accent','--grid','--gate-fill','--gate-stroke','--box','--on','--off','--canvas']
+    .map(v => `${v}:${cs.getPropertyValue(v).trim()}`).join(';');
+  const A = analyze(buildIndex());
+  const t = taskOf();
+  const title = `${S.task === 'free' ? '7-segment circuit' : t.title} — ${S.bits} bit${S.bits > 1 ? 's' : ''}, ${MODE_LABEL[S.mode]}, ${S.disp === 'cc' ? 'common cathode' : 'common anode'}`;
+  const sub = `${A.ok} / ${A.cnt} digits correct · ${gateCount()} gates`;
+  const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${w * 2}" height="${h * 2}" viewBox="${x0} ${y0} ${w} ${h}">` +
+    `<style>svg{${vars};font-family:"Segoe UI",Arial,sans-serif}${$('#svgcss').textContent}</style>` +
+    `<rect x="${x0}" y="${y0}" width="${w}" height="${h}" fill="${cs.getPropertyValue('--canvas').trim()}"/>` +
+    `<text x="${x0 + pad}" y="${y0 + 28}" style="font-size:16px;font-weight:700;fill:var(--ink)">${esc(title)}</text>` +
+    `<text x="${x0 + pad}" y="${y0 + 46}" style="font-size:12px;fill:var(--muted)">${esc(sub)}</text>` +
+    world.innerHTML + `</svg>`;
+  selC = keepC; selW = keepW;
+  render();
+  const img = new Image();
+  img.onload = () => {
+    try {
+      const cv = document.createElement('canvas');
+      cv.width = w * 2; cv.height = h * 2;
+      cv.getContext('2d').drawImage(img, 0, 0);
+      cv.toBlob(bl => bl ? download(bl, '7seg-circuit.png') : fallback());
+    } catch (err) { fallback(); }
+  };
+  const fallback = () => download(new Blob([svgStr], {type: 'image/svg+xml'}), '7seg-circuit.svg');
+  img.onerror = fallback;
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
+});
+
+// ---------- tasks ----------
+function openTasks() {
+  $('#taskList').innerHTML = TASKS.map(t => {
+    const tags = t.set ? [`${t.set.bits} bit${t.set.bits > 1 ? 's' : ''}`, MODE_LABEL[t.set.mode], t.set.disp === 'ca' ? 'common anode' : null,
+                          t.set.allowed ? t.set.allowed.join('/') + ' only' : null].filter(Boolean) : ['any settings'];
+    return `<button class="taskitem${t.id === S.task ? ' cur' : ''}" data-task="${t.id}"><b>${t.title}</b><span>${t.desc}</span>` +
+           `<div class="tags">${tags.map(x => `<em>${x}</em>`).join('')}</div></button>`;
+  }).join('');
+  $('#taskDlg').showModal();
+}
+$('#taskList').addEventListener('click', e => {
+  const b = e.target.closest('[data-task]');
+  if (!b) return;
+  const t = TASKS.find(x => x.id === b.dataset.task);
+  const hasParts = S.comps.some(c => !fixed(c));
+  const clear = t.set && hasParts && confirm('Start the task with an empty board?\n\nOK = clear the board\nCancel = keep your current gates');
+  stopPlay();
+  pushUndo();
+  S.task = t.id;
+  S.allowed = t.set && t.set.allowed ? [...t.set.allowed] : null;
+  if (t.set) applySettings(t.set.bits, t.set.mode, t.set.disp);
+  if (clear) { S.comps = S.comps.filter(fixed); S.wires = []; }
+  lastAllOk = null;
+  clearSel(); syncControls(); commit();
+  $('#taskDlg').close();
+  fit();
+});
+
+// ---------- keyboard ----------
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input,select,textarea') || document.querySelector('dialog[open]')) return;
+  const ctrl = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+  if (ctrl && k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+  else if (ctrl && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
+  else if (ctrl && k === 'd') { e.preventDefault(); duplicateSelected(); }
+  else if (ctrl && k === 'c') { if (copySel()) toast('Copied — press Ctrl+V to paste'); }
+  else if (ctrl && k === 'v') { e.preventDefault(); paste(); }
+  else if (ctrl && k === 'a') { e.preventDefault(); selC = new Set(S.comps.map(c => c.id)); selW = null; render(); }
+  else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelected(); }
+  else if (e.key === 'Escape') { if (drag) endDrag(e, true); clearSel(); render(); }
+  else if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { e.preventDefault(); stopPlay(); setValue(curValue() + 1); }
+  else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') { e.preventDefault(); stopPlay(); setValue(curValue() - 1); }
+});
+window.addEventListener('resize', applyView);
+
+// ---------- start ----------
+$('#logo').innerHTML = `<svg viewBox="72 40 88 168" width="12" height="22">${SEGS.map(([pts], i) => `<polygon points="${pts}" fill="${i === 6 ? '#3b1a1a' : '#ff3b30'}"/>`).join('')}</svg>`;
+if (NOSOL) document.querySelector('.tab[data-tab="solution"]').remove();
+load();
+syncControls();
+render();
+(function initialFit(tries) {
+  if (svg.getBoundingClientRect().width > 0 || tries > 40) fit();
+  else setTimeout(() => initialFit(tries + 1), 50);
+})(0);
+let seen = true;
+try { seen = !!localStorage.getItem(STORE + '-seen'); localStorage.setItem(STORE + '-seen', '1'); } catch (e) {}
+if (!seen) $('#helpDlg').showModal();
+})();
+</script>
+</body>
+</html>
