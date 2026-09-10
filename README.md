@@ -37,5 +37,13 @@ code-signed, so Windows SmartScreen may show "Windows protected your PC" the fir
     time. The Karnaugh map highlights the group each term covers, and one button builds the whole circuit on the
     board. NAND-only / NOR-only tasks get NAND–NAND / NOR–NOR circuits.
   - Add `?nosolution` to the link (e.g. `https://…netlify.app/?nosolution`) to hide all solutions, e.g. for tests.
-- **Editing**: multi-select (Shift+drag), copy/paste, duplicate, undo/redo, and zoom/pan.
+- **Learning aids**:
+  - Click a gate to see its truth table (with the current row marked), its live values and the formula its output computes.
+  - The display marks mistakes: a dashed segment should be lit, and a yellow segment should be off.
+  - "Jump to a wrong digit" takes you to the next incorrect input. Hovering a part highlights its wires, and wire tooltips show where each wire goes.
+  - The truth table has a *Code* column with the segment byte (e.g. `0x3F` for 0), the value a microcontroller would output to drive the display directly.
+- **Editing**:
+  - Wire by dragging, or by clicking one pin and then the other; the pins you can connect to light up.
+  - Multi-select (Shift+drag), copy/paste, duplicate, undo/redo, and zoom/pan.
+  - Keys A–F toggle the controller inputs.
 - **Saving**: autosave in the browser, save/open `.json` files, and export a PNG picture of the circuit to hand in.

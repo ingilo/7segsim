@@ -86,7 +86,7 @@ aside h3:first-child{margin-top:0}
 #zoom .btn{border-color:transparent;padding:3px 9px}
 #zoom .btn:hover{border-color:var(--accent)}
 #zoomPct{font-size:12px;color:var(--muted);min-width:40px;text-align:center}
-#emptyHint{left:50%;top:18px;transform:translateX(-50%);background:var(--panel);border:1px dashed var(--accent);color:var(--muted);border-radius:10px;padding:8px 14px;font-size:13px;pointer-events:none;box-shadow:var(--shadow)}
+#emptyHint{left:50%;top:18px;transform:translateX(-50%);width:max-content;max-width:min(560px,90%);text-align:center;background:var(--panel);border:1px dashed var(--accent);color:var(--muted);border-radius:10px;padding:8px 14px;font-size:13px;pointer-events:none;box-shadow:var(--shadow)}
 #ghost{position:fixed;pointer-events:none;z-index:50;opacity:.85;display:none}
 #toast{position:fixed;left:50%;top:70px;transform:translate(-50%,-20px);background:var(--panel);border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.18);border-radius:12px;padding:10px 18px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:60}
 #toast.show{opacity:1;transform:translate(-50%,0)}
@@ -167,6 +167,17 @@ table.kmap{border-collapse:separate;border-spacing:3px;font-family:ui-monospace,
 .chip .math{font-size:15px}
 .chip:hover,.chip.on{border-color:var(--accent);background:var(--accent-soft)}
 .kmap td.hl{box-shadow:inset 0 0 0 3px var(--accent);filter:saturate(1.4)}
+.tt th.segh{cursor:pointer;text-decoration:underline dotted}
+.tt th.segh:hover{color:var(--accent)}
+.tt td.code{color:var(--muted);font-size:11px}
+.gtt{border-collapse:collapse;font:12px ui-monospace,Consolas,monospace;margin:6px 0}
+.gtt th,.gtt td{border:1px solid var(--line);padding:1px 8px;text-align:center}
+.gtt th{color:var(--muted);font-weight:600}
+.gtt tr.now td{background:var(--accent-soft);font-weight:800}
+.gtt td.o1{color:var(--ok-ink);font-weight:800}
+.selexpr{margin:8px 0 4px;word-break:break-word}
+.selexpr .math{font-size:16px}
+#summary .btn{margin-top:8px}
 
 /* ---------- dialogs ---------- */
 dialog{border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);max-width:720px;width:calc(100% - 40px);padding:22px 26px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
@@ -193,6 +204,8 @@ svg text{pointer-events:none;user-select:none}
 .wire.on{stroke:var(--on)}
 .wire.off{stroke:var(--off)}
 .wg:hover .wire{stroke-width:4}
+.wg.hl .wire{stroke-width:4.2}
+.wg.hl .wire.off{stroke:var(--accent)}
 .wire.temp{stroke:var(--accent);stroke-dasharray:6 4}
 .wire-sel{fill:none;stroke:var(--accent);stroke-width:10;opacity:.28;pointer-events:none}
 .wire-hit{fill:none;stroke:transparent;stroke-width:12;cursor:pointer}
@@ -228,12 +241,16 @@ svg text{pointer-events:none;user-select:none}
 .seg.on{fill:#ff3b30;filter:drop-shadow(0 0 5px #ff3b30)}
 .seglbl{font-size:9px;font-weight:700;fill:#8a5555}
 .seg.on + .seglbl{fill:#ffe4e1}
+.seg.extra{fill:#fbbf24;filter:drop-shadow(0 0 5px #fbbf24)}
+.seg.miss{stroke:#ff6b60;stroke-width:1.8;stroke-dasharray:3 2}
+.rowhit{fill:transparent;cursor:pointer}
 .note{fill:#fef3c7;stroke:#d97706;stroke-width:1.5}
 .notetxt{fill:#78350f;font-size:12.5px}
 .pin{fill:var(--panel);stroke:var(--gate-stroke);stroke-width:1.5}
 .pin.on{fill:var(--on);stroke:var(--on)}
 .pin.open{stroke:var(--muted);stroke-dasharray:2 2}
 .pin-hit{fill:transparent;cursor:crosshair}
+.pinwrap.cand .pin{stroke:var(--accent);stroke-width:2.2;stroke-dasharray:none}
 .pinwrap:hover .pin,.pinwrap.target .pin{r:6px;stroke:var(--accent);stroke-width:2.5;stroke-dasharray:none}
 .selbox{fill:var(--accent);fill-opacity:.07;stroke:var(--accent);stroke-width:1.2;stroke-dasharray:5 4}
 </style>
@@ -311,7 +328,7 @@ svg text{pointer-events:none;user-select:none}
         <g id="world"></g>
       </g>
     </svg>
-    <div class="overlay" id="emptyHint">👈 Drag gates onto the board, then drag from pin to pin to connect them.</div>
+    <div class="overlay" id="emptyHint"><b>Get started:</b> ① drag a gate from the left onto the board &nbsp;② drag (or click) from a controller output ○ to a gate input &nbsp;③ connect the gate output to a display pin a–g</div>
     <div class="overlay" id="status"></div>
     <div class="overlay" id="zoom">
       <button class="btn" id="zoomOut" title="Zoom out">−</button>
@@ -360,11 +377,13 @@ svg text{pointer-events:none;user-select:none}
   <h4>Controls</h4>
   <ul>
     <li><b>Add:</b> drag a component from the left panel, or click it. <b>NOTE</b> adds a text note (double-click it to edit).</li>
-    <li><b>Wire:</b> drag from a pin (small circle) to another pin. One output can feed many inputs.</li>
+    <li><b>Wire:</b> drag from a pin (small circle) to another pin, or click one pin and then the other. The pins you can connect to light up blue. One output can feed many inputs.</li>
+    <li><b>Understand a gate:</b> click it to see its truth table, its current values and the formula its output computes. Hover over a part to highlight its wires.</li>
     <li><b>Move or remove a wire:</b> drag it off the input pin. Drop it on empty space to delete it.</li>
     <li><b>Select several:</b> <kbd>Shift</kbd>+drag on the board or <kbd>Shift</kbd>+click. <kbd>Ctrl</kbd>+<kbd>A</kbd> selects everything.</li>
     <li><b>Delete:</b> <kbd>Delete</kbd>, or right-click a part. <b>Copy/paste:</b> <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd>. <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicates.</li>
-    <li><b>Inputs:</b> click the controller switches, click a truth-table row or K-map cell, or use <kbd>↑</kbd>/<kbd>↓</kbd>.</li>
+    <li><b>Inputs:</b> click a row on the controller, press <kbd>A</kbd> <kbd>B</kbd> <kbd>C</kbd> <kbd>D</kbd>, click a truth-table row or K-map cell, or use <kbd>↑</kbd>/<kbd>↓</kbd>.</li>
+    <li><b>Find mistakes:</b> on the display, a <b>dashed</b> segment should be lit and a <b>yellow</b> segment should be off. <b>➜ Jump to a wrong digit</b> takes you to the next digit that is still wrong.</li>
     <li><b>View:</b> drag the empty board to pan; use the mouse wheel to zoom.</li>
     <li><b>Undo/redo:</b> <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd>. Your work is saved in this browser automatically. <b>🖼 Image</b> saves a picture you can hand in.</li>
   </ul>
@@ -411,6 +430,9 @@ const TASKS = [
 ];
 const MODE_LABEL = {hex:'Hex 0–F', dec:'0–9 (10+ don\'t care)', decblank:'0–9 (10+ blank)'};
 const LETTERS = 'ABCDEFGH';
+// colours used for the exported picture (always light, so it prints well)
+const LIGHT_VARS = {'--panel':'#ffffff', '--ink':'#1e293b', '--muted':'#64748b', '--line':'#dde3ec', '--accent':'#2563eb',
+  '--grid':'#cfd7e3', '--gate-fill':'#ffffff', '--gate-stroke':'#334155', '--box':'#f1f5f9', '--on':'#16a34a', '--off':'#9aa6b8'};
 const STORE = 'sevenseg-lab-v1';
 const GRID = 10;
 
@@ -434,6 +456,7 @@ let playTimer = null, addCount = 0;
 let clip = null, pasteN = 0;
 let lastSelSig = '', lastAnaSig = '', lastAllOk = null;
 let revealed = new Set(), revealKey = '';   // segments whose solution is shown
+let hoverComp = null, suppressCtx = false, lastAna = null;
 const NOSOL = new URLSearchParams(location.search).has('nosolution');   // ?nosolution hides all solutions
 
 const svg = $('#svg'), world = $('#world'), viewport = $('#viewport');
@@ -566,6 +589,18 @@ function pinWorld(cid, kind, p, byId) {
   const pt = (kind === 'in' ? inPinsLocal(c) : outPinsLocal(c))[p];
   return pt ? {x: c.x + pt.x, y: c.y + pt.y} : null;
 }
+function srcName(from, byId) {
+  const c = byId.get(from.c);
+  if (!c) return '?';
+  if (c.type === 'CTRL') return LETTERS[from.p];
+  if (c.type === 'CONST') return 'constant ' + (c.value ? 1 : 0);
+  return c.type + ' output';
+}
+function dstName(to, byId) {
+  const c = byId.get(to.c);
+  if (!c) return '?';
+  return c.type === 'DISP' ? 'segment ' + SEG[to.p] : `${c.type} input ${to.p + 1}`;
+}
 function wirePath(a, b) {
   const d = Math.max(30, Math.abs(b.x - a.x) * 0.5);
   return `M${a.x} ${a.y} C${a.x + d} ${a.y} ${b.x - d} ${b.y} ${b.x} ${b.y}`;
@@ -641,7 +676,8 @@ function analyze(idx) {
   return {rows, ok, cnt, unstable, segGood, disallowed};
 }
 // Boolean expression that the wiring computes for each display pin
-function buildExprs(idx) {
+// returns node(cid, p) -> {h: html, p: precedence} for the signal on an output pin
+function exprMaker(idx) {
   const memo = new Map(), visiting = new Set();
   const ov = h => `<span class="ov">${h}</span>`;
   function src(cid, p) {
@@ -673,6 +709,10 @@ function buildExprs(idx) {
     memo.set(cid, r);
     return r;
   }
+  return node;
+}
+function buildExprs(idx) {
+  const node = exprMaker(idx);
   return SEG.split('').map((_, i) => {
     const w = idx.inMap.get('disp:' + i);
     return w ? node(w.from.c, w.from.p).h : null;
@@ -725,7 +765,8 @@ function miniDigit(lit, w = 13, h = 24) {
 
 function pinSvg(c, kind, i, pt, val, connected, label) {
   const key = c.id + '|' + kind + '|' + i;
-  const tgt = drag && drag.kind === 'wire' && drag.hover === key ? ' target' : '';
+  const wd = drag && drag.kind === 'wire';
+  const tgt = (wd && drag.hover === key ? ' target' : '') + (wd && kind === (drag.from.kind === 'out' ? 'in' : 'out') ? ' cand' : '');
   const vtxt = val === null || val === undefined ? 'not connected' : val;
   return `<g class="pinwrap${tgt}"><circle class="pin ${kind}${val === 1 ? ' on' : ''}${connected ? '' : ' open'}" cx="${pt.x}" cy="${pt.y}" r="4"/>` +
          `<circle class="pin-hit" data-pin="${key}" cx="${pt.x}" cy="${pt.y}" r="9"><title>${label} = ${vtxt}</title></circle></g>`;
@@ -750,6 +791,7 @@ function renderComp(c, res, idx) {
     s += `<text class="chipsub" x="12" y="37">value</text><text class="chipval" x="128" y="38" text-anchor="end">${v}</text>`;
     for (let i = 0; i < S.bits; i++) {
       const y = 60 + i * 40, on = S.inputs[i];
+      s += `<rect class="rowhit" data-toggle="${i}" x="4" y="${y - 18}" width="132" height="36" rx="6"><title>Click to switch ${LETTERS[i]} (or press the ${LETTERS[i]} key)</title></rect>`;
       s += `<g class="tg" data-toggle="${i}"><rect class="toggle${on ? ' on' : ''}" x="12" y="${y - 10}" width="36" height="20" rx="10"/>` +
            `<circle class="knob" cx="${on ? 38 : 22}" cy="${y}" r="7"/><title>Click to switch ${LETTERS[i]}</title></g>`;
       s += `<text class="chiptxt" x="58" y="${y + 4.5}">${LETTERS[i]}</text><text class="chipsub" x="73" y="${y + 4}">weight ${1 << (S.bits - 1 - i)}</text>`;
@@ -766,10 +808,15 @@ function renderComp(c, res, idx) {
       const y = 50 + i * 30;
       s += `<line class="stub" x1="-20" y1="${y}" x2="0" y2="${y}"/><text class="plbl" x="10" y="${y + 4.5}">${SEG[i]}</text>`;
     }
-    SEGS.forEach(([pts, cx, cy], i) => {
-      s += `<polygon class="seg${litOf(res.disp[i]) ? ' on' : ''}" points="${pts}"/><text class="seglbl" x="${cx}" y="${cy + 3}" text-anchor="middle">${SEG[i]}</text>`;
-    });
     const v = curValue(), exp = expectedLit(v);
+    SEGS.forEach(([pts, cx, cy], i) => {
+      // dashed outline = should be lit but is off; yellow = lit but should be off
+      const lit = litOf(res.disp[i]);
+      let cls = lit ? ' on' : '', tip = `Segment ${SEG[i]}: ${lit ? 'lit' : 'off'}`;
+      if (exp && exp[i] && !lit) { cls = ' miss'; tip += ' (should be lit)'; }
+      if (exp && !exp[i] && lit) { cls = ' on extra'; tip += ' (should be off)'; }
+      s += `<polygon class="seg${cls}" points="${pts}"><title>${tip}</title></polygon><text class="seglbl" x="${cx}" y="${cy + 3}" text-anchor="middle">${SEG[i]}</text>`;
+    });
     s += `<text class="dsub" x="12" y="249">Should show: <tspan class="dshould">${exp ? digitLabel(v) : 'X (don\'t care)'}</tspan></text>`;
     if (exp) {
       const good = exp.every((b, i) => b === litOf(res.disp[i]));
@@ -807,8 +854,8 @@ function render() {
     const a = pinWorld(w.from.c, 'out', w.from.p, idx.byId), b = pinWorld(w.to.c, 'in', w.to.p, idx.byId);
     if (!a || !b) continue;
     const d = wirePath(a, b), v = res.out.get(w.from.c + ':' + w.from.p) ? 1 : 0;
-    h += `<g class="wg">${selW === w.id ? `<path class="wire-sel" d="${d}"/>` : ''}<path class="wire ${v ? 'on' : 'off'}" d="${d}"/>` +
-         `<path class="wire-hit" data-wire="${w.id}" d="${d}"><title>Wire = ${v}</title></path></g>`;
+    h += `<g class="wg" data-a="${w.from.c}" data-b="${w.to.c}">${selW === w.id ? `<path class="wire-sel" d="${d}"/>` : ''}<path class="wire ${v ? 'on' : 'off'}" d="${d}"/>` +
+         `<path class="wire-hit" data-wire="${w.id}" d="${d}"><title>${srcName(w.from, idx.byId)} → ${dstName(w.to, idx.byId)} = ${v}</title></path></g>`;
   }
   for (const c of order) if (c.type !== 'NOTE') h += renderComp(c, res, idx);
   if (drag && drag.kind === 'wire') {
@@ -824,8 +871,9 @@ function render() {
   world.innerHTML = h;
   applyView();
   renderStatus(res);
-  renderSel();
+  renderSel(res, idx);
   renderStats();
+  applyHover();
   document.querySelectorAll('.pal').forEach(p => p.classList.toggle('off', !allowedType(p.dataset.type)));
   $('#emptyHint').hidden = S.comps.some(c => isGate(c.type) || c.type === 'CONST') || S.wires.length > 0;
   $('#taskBtn').textContent = '📋 ' + (S.task === 'free' ? 'Tasks' : taskOf().title);
@@ -841,22 +889,52 @@ function renderStatus(res) {
   let s = `<span>Input <span class="bits">${S.inputs.join('')}</span> = <b>${v}</b></span><span>→ should show <b>${exp ? digitLabel(v) : 'X'}</b></span>`;
   if (exp) {
     const good = exp.every((b, i) => b === litOf(res.disp[i]));
-    s += good ? '<span class="ok">✓ correct</span>' : '<span class="bad">✗ not yet</span>';
+    s += good ? '<span class="ok">✓ correct</span>'
+              : '<span class="bad">✗ not yet</span><span class="hint" style="margin:0">dashed = missing · yellow = should be off</span>';
   } else s += '<span class="hint" style="margin:0">(don\'t care)</span>';
   if (!res.stable) s += '<span class="warn">⚠ Feedback loop: the circuit never settles</span>';
+  if (drag && drag.pending) s = '<span class="warn">🔌 Now click the pin where the wire should go · Esc cancels</span>';
   $('#status').innerHTML = s;
 }
 
-function renderSel() {
+function gateInputs(c, res, idx) {
+  const n = c.type === 'NOT' ? 1 : c.n;
+  return Array.from({length: n}, (_, i) => {
+    const w = idx.inMap.get(c.id + ':' + i);
+    return w ? (res.out.get(w.from.c + ':' + w.from.p) || 0) : null;
+  });
+}
+// live values, formula and truth table for the selected gate
+function gateDetails(c, res, idx) {
+  const ins = gateInputs(c, res, idx), n = ins.length, out = res.out.get(c.id + ':0') || 0;
+  const cur = ins.map(v => v || 0);
+  let h = `<div class="selexpr">Output = <span class="math">${exprMaker(idx)(c.id, 0).h}</span></div>`;
+  h += `<p style="margin:4px 0">Now: ${cur.join(', ')} → <b class="${out ? 'stok' : ''}">${out}</b>` +
+       `${ins.includes(null) ? ' <span class="hint">(unconnected inputs count as 0)</span>' : ''}</p>`;
+  let rows = '';
+  for (let r = 0; r < (1 << n); r++) {
+    const bits = Array.from({length: n}, (_, i) => (r >> (n - 1 - i)) & 1), o = gateFn(c.type, bits);
+    rows += `<tr${bits.every((b, i) => b === cur[i]) ? ' class="now"' : ''}>${bits.map(b => `<td>${b}</td>`).join('')}<td class="${o ? 'o1' : ''}">${o}</td></tr>`;
+  }
+  const table = `<table class="gtt"><tr>${ins.map((_, i) => `<th>In ${i + 1}</th>`).join('')}<th>Out</th></tr>${rows}</table>`;
+  return h + (n <= 3 ? table : `<details><summary>Truth table (16 rows)</summary>${table}</details>`);
+}
+
+function renderSel(res, idx) {
   const ids = [...selC];
   const c = ids.length === 1 ? comp(ids[0]) : null;
-  const sig = JSON.stringify([ids, selW, c, S.bits]);
+  const selWire = selW ? S.wires.find(w => w.id === selW) : null;
+  const sig = JSON.stringify([ids, selW, c, S.bits,
+    c && isGate(c.type) ? [gateInputs(c, res, idx), res.out.get(c.id + ':0'), S.wires] : null,
+    selWire ? res.out.get(selWire.from.c + ':' + selWire.from.p) : null]);
   if (sig === lastSelSig) return;
   lastSelSig = sig;
   const el = $('#selpanel');
   const actions = `<div class="row"><button class="btn" data-act="dup">Duplicate</button><button class="btn danger" data-act="del">Delete</button></div>`;
   if (selW) {
-    el.innerHTML = `<p><b>Wire</b></p><p class="hint">Tip: drag a wire off its input pin to move it somewhere else.</p>
+    const wv = selWire && res.out.get(selWire.from.c + ':' + selWire.from.p) ? 1 : 0;
+    el.innerHTML = `<p><b>Wire</b></p>${selWire ? `<p style="margin:4px 0">${srcName(selWire.from, idx.byId)} → ${dstName(selWire.to, idx.byId)}<br>Value now: <b>${wv}</b></p>` : ''}
+      <p class="hint">Tip: drag a wire off its input pin to move it somewhere else.</p>
       <button class="btn danger" data-act="del">Delete wire</button>`;
     return;
   }
@@ -870,7 +948,7 @@ function renderSel() {
     el.innerHTML = `<p><b>${c.type} gate</b></p>
       <label class="row">Type <select id="selType">${GATE_TYPES.map(t => `<option${t === c.type ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
       ${c.type !== 'NOT' ? `<div class="row">Inputs <button class="btn sm" data-act="nminus" ${c.n <= 2 ? 'disabled' : ''}>−</button><b>${c.n}</b><button class="btn sm" data-act="nplus" ${c.n >= 4 ? 'disabled' : ''}>+</button></div>` : ''}
-      <p class="hint">${GATE_INFO[c.type]}</p>${actions}`;
+      <p class="hint">${GATE_INFO[c.type]}</p>${gateDetails(c, res, idx)}${actions}`;
   } else if (c.type === 'CONST') {
     el.innerHTML = `<p><b>Constant ${c.value}</b></p><p class="hint">Always outputs ${c.value}. Click it on the board to flip it.</p>${actions}`;
   } else if (c.type === 'NOTE') {
@@ -903,6 +981,11 @@ function compressRanges(list) {
   }
   return out.join(',');
 }
+// segment byte (bit 0 = a … bit 6 = g), as a microcontroller would output it
+function segCode(exp) {
+  if (!exp) return '–';
+  return '0x' + exp.reduce((s, lit, i) => s | (levelOf(lit) << i), 0).toString(16).toUpperCase().padStart(2, '0');
+}
 function mintermText(A, i) {
   const mins = A.rows.filter(r => r.exp && levelOf(r.exp[i]) === 1).map(r => r.v);
   const dcs = A.rows.filter(r => !r.exp).map(r => r.v);
@@ -930,6 +1013,8 @@ function renderAnalysis(idx) {
   if (A.disallowed.length) sum += `<div class="stbad" style="margin-top:4px">⚠ This task only allows ${S.allowed.join(', ')}. Replace: ${A.disallowed.join(', ')}.</div>`;
   if (A.unstable) sum += `<div style="color:var(--warn);margin-top:4px">⚠ Some input values make the circuit oscillate (feedback loop).</div>`;
   sum += `<div class="bar"><i style="width:${A.cnt ? (100 * A.ok / A.cnt) : 0}%"></i></div>`;
+  if (A.cnt && A.ok < A.cnt) sum += `<button class="btn" data-act="nexterr" title="Set the inputs to a digit that is still wrong">➜ Jump to a wrong digit</button>`;
+  lastAna = A;
   $('#summary').innerHTML = sum;
   if (allOk && lastAllOk === false) toast(`🎉 Well done! Every digit is correct with ${gates} gate${gates === 1 ? '' : 's'}.`);
   lastAllOk = allOk;
@@ -955,17 +1040,18 @@ function renderTableTab(A) {
     }
     body += `<tr data-v="${r.v}"${r.v === cur ? ' class="cur"' : ''}><td class="num">${r.v}</td>${r.ins.map(b => `<td class="bit">${b}</td>`).join('')}` +
             `<td class="dig">${digitLabel(r.v)}</td><td class="yours" title="What your circuit shows">${miniDigit(r.lit)}</td>${cells}` +
-            `<td class="st ${r.good ? 'stok' : 'stbad'}">${r.exp ? (r.good ? '✓' : '✗') : ''}</td></tr>`;
+            `<td class="code">${segCode(r.exp)}</td><td class="st ${r.good ? 'stok' : 'stbad'}">${r.exp ? (r.good ? '✓' : '✗') : ''}</td></tr>`;
   }
   const head = `<thead><tr><th>#</th>${[...Array(N)].map((_, i) => `<th>${LETTERS[i]}</th>`).join('')}<th title="Digit it should show">Want</th><th title="What your circuit shows">Yours</th>` +
-               SEG.split('').map((s, i) => `<th${A.segGood[i] ? ' class="sgood"' : ''}>${s}</th>`).join('') + '<th></th></tr></thead>';
+               SEG.split('').map((s, i) => `<th class="segh${A.segGood[i] ? ' sgood' : ''}" data-kmap="${i}" title="Open the Karnaugh map for segment ${s}">${s}</th>`).join('') +
+               '<th title="Segment code as one byte (bits g f e d c b a): what a microcontroller would output to drive the display directly">Code</th><th></th></tr></thead>';
   return `<div class="tbhead"><span class="hint" style="margin:0">Cells show: </span><div class="segtoggle">
       <button class="btn${tableView === 'exp' ? ' active' : ''}" data-tv="exp" title="What each segment pin should be">Expected</button>
       <button class="btn${tableView === 'mine' ? ' active' : ''}" data-tv="mine" title="What your circuit outputs">My circuit</button></div></div>
     <div class="tablewrap"><table class="tt">${head}<tbody>${body}</tbody></table></div>
     <p class="legend"><span style="background:var(--ok);color:var(--ok-ink)">green</span> correct,
       <span style="background:var(--bad);color:var(--bad-ink)">red</span> wrong,
-      <span style="background:var(--dc)">X</span> don't care, · not connected. Click a row to set the inputs.</p>
+      <span style="background:var(--dc)">X</span> don't care, · not connected. Click a row to set the inputs, or a segment letter to open its Karnaugh map.</p>
     <div class="card"><b>Minterms</b> <span class="hint">(input values where the pin must be 1, plus don't-cares)</span>
       ${SEG.split('').map((_, i) => `<div class="mt">${mintermText(A, i)}</div>`).join('')}</div>`;
 }
@@ -1366,6 +1452,14 @@ function manualSetting(fn) {
 
 // ---------- pointer on the board ----------
 svg.addEventListener('pointerdown', e => {
+  if (drag && drag.pending) {   // second click of click-to-connect
+    const d = drag, p = toWorld(e);
+    drag = null;
+    if (e.button === 2) suppressCtx = true;
+    const tk = e.button === 0 ? nearestPin(d.from.kind === 'out' ? 'in' : 'out', p.x, p.y) : null;
+    if (tk) { connectWire(d, tk); commit(); } else render();
+    return;
+  }
   if (e.button === 2) return;
   const p = toWorld(e);
   svg.setPointerCapture(e.pointerId);
@@ -1380,12 +1474,13 @@ svg.addEventListener('pointerdown', e => {
       if (w) { // pick the wire up from this input
         pushUndo();
         S.wires = S.wires.filter(x => x !== w);
-        drag = {kind: 'wire', from: {c: w.from.c, kind: 'out', p: w.from.p}, x: p.x, y: p.y, undoPushed: true, hover: null};
+        drag = {kind: 'wire', from: {c: w.from.c, kind: 'out', p: w.from.p}, x: p.x, y: p.y, undoPushed: true, hover: null,
+                picked: w, sx: e.clientX, sy: e.clientY};
         render();
         return;
       }
     }
-    drag = {kind: 'wire', from: {c, kind, p: pi}, x: p.x, y: p.y, hover: null};
+    drag = {kind: 'wire', from: {c, kind, p: pi}, x: p.x, y: p.y, hover: null, sx: e.clientX, sy: e.clientY};
     render();
     return;
   }
@@ -1402,7 +1497,7 @@ svg.addEventListener('pointerdown', e => {
     }
     if (!selC.has(id)) selectOnly(id);
     const tg = e.target.closest('[data-toggle]');
-    const starts = new Map([...selC].map(sid => { const c = comp(sid); return [sid, {x: c.x, y: c.y}]; }));
+    const starts = new Map([...selC].map(comp).filter(Boolean).map(c => [c.id, {x: c.x, y: c.y}]));
     drag = {kind: 'move', id, starts, p0: p, sx: e.clientX, sy: e.clientY, moved: false, toggle: tg ? +tg.dataset.toggle : null};
     render();
     return;
@@ -1460,18 +1555,34 @@ function endDrag(e, cancelled) {
     else if (!d.moved && c && c.type === 'CONST') { pushUndo(); c.value = c.value ? 0 : 1; }
     commit();
   } else if (d.kind === 'wire') {
+    if (d.pending) { drag = d; return; }
+    if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 5) {
+      if (d.picked) {            // plain click on a connected input: keep the wire and select it
+        undoStack.pop();
+        S.wires.push(d.picked);
+        selC = new Set();
+        selW = d.picked.id;
+        render();
+      } else {                   // plain click on a pin: click-to-connect
+        d.pending = true;
+        drag = d;
+        render();
+      }
+      return;
+    }
     const p = toWorld(e);
     const tk = nearestPin(d.from.kind === 'out' ? 'in' : 'out', p.x, p.y);
-    if (tk) {
-      const [c, , pp] = tk.split('|');
-      const t = {c, p: +pp}, f = {c: d.from.c, p: d.from.p};
-      const from = d.from.kind === 'out' ? f : t, to = d.from.kind === 'out' ? t : f;
-      if (!d.undoPushed) pushUndo();
-      S.wires = S.wires.filter(w => !(w.to.c === to.c && w.to.p === to.p));
-      S.wires.push({id: uid(), from, to});
-    }
+    if (tk) connectWire(d, tk);
     commit();
   } else render();
+}
+function connectWire(d, tk) {
+  const [c, , pp] = tk.split('|');
+  const t = {c, p: +pp}, f = {c: d.from.c, p: d.from.p};
+  const from = d.from.kind === 'out' ? f : t, to = d.from.kind === 'out' ? t : f;
+  if (!d.undoPushed) pushUndo();
+  S.wires = S.wires.filter(w => !(w.to.c === to.c && w.to.p === to.p));
+  S.wires.push({id: uid(), from, to});
 }
 svg.addEventListener('pointerup', e => endDrag(e, false));
 svg.addEventListener('pointercancel', e => endDrag(e, true));
@@ -1481,8 +1592,19 @@ svg.addEventListener('dblclick', e => {
   const c = el && comp(el.dataset.comp);
   if (c && c.type === 'NOTE') editNote(c);
 });
+// hovering a part highlights all of its wires
+svg.addEventListener('pointerover', e => {
+  const el = e.target.closest('[data-comp]'), id = el ? el.dataset.comp : null;
+  if (id !== hoverComp) { hoverComp = id; applyHover(); }
+});
+svg.addEventListener('pointerleave', () => { hoverComp = null; applyHover(); });
+function applyHover() {
+  world.querySelectorAll('.wg.hl').forEach(g => g.classList.remove('hl'));
+  if (hoverComp) world.querySelectorAll(`.wg[data-a="${hoverComp}"], .wg[data-b="${hoverComp}"]`).forEach(g => g.classList.add('hl'));
+}
 svg.addEventListener('contextmenu', e => {
   e.preventDefault();
+  if (suppressCtx) { suppressCtx = false; return; }
   const w = e.target.closest('[data-wire]'), c = e.target.closest('[data-comp]');
   if (w) { selC = new Set(); selW = w.dataset.wire; }
   else if (c) selectOnly(c.dataset.comp);
@@ -1600,6 +1722,13 @@ $('#tabBody').addEventListener('mouseout', e => {
   const c = e.target.closest('[data-cells]');
   if (c && !c.contains(e.relatedTarget)) highlightCells('');
 });
+$('#summary').addEventListener('click', e => {
+  if (!e.target.closest('[data-act="nexterr"]') || !lastAna) return;
+  const cur = curValue(), bad = lastAna.rows.filter(r => r.exp && !r.good).map(r => r.v);
+  if (!bad.length) return;
+  stopPlay();
+  setValue(bad.find(v => v > cur) ?? bad[0]);
+});
 $('#taskCard').addEventListener('click', e => {
   const b = e.target.closest('[data-act]');
   if (!b) return;
@@ -1682,16 +1811,14 @@ $('#image').addEventListener('click', () => {
   render();
   const b = boundsOf(S.comps), pad = 30, head = 46;
   const x0 = b.x0 - pad, y0 = b.y0 - pad - head, w = b.x1 - b.x0 + pad * 2, h = b.y1 - b.y0 + pad * 2 + head;
-  const cs = getComputedStyle(document.documentElement);
-  const vars = ['--panel','--ink','--muted','--line','--accent','--grid','--gate-fill','--gate-stroke','--box','--on','--off','--canvas']
-    .map(v => `${v}:${cs.getPropertyValue(v).trim()}`).join(';');
+  const vars = Object.entries(LIGHT_VARS).map(([k, v]) => `${k}:${v}`).join(';');
   const A = analyze(buildIndex());
   const t = taskOf();
   const title = `${S.task === 'free' ? '7-segment circuit' : t.title} — ${S.bits} bit${S.bits > 1 ? 's' : ''}, ${MODE_LABEL[S.mode]}, ${S.disp === 'cc' ? 'common cathode' : 'common anode'}`;
   const sub = `${A.ok} / ${A.cnt} digits correct · ${gateCount()} gates`;
   const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${w * 2}" height="${h * 2}" viewBox="${x0} ${y0} ${w} ${h}">` +
     `<style>svg{${vars};font-family:"Segoe UI",Arial,sans-serif}${$('#svgcss').textContent}</style>` +
-    `<rect x="${x0}" y="${y0}" width="${w}" height="${h}" fill="${cs.getPropertyValue('--canvas').trim()}"/>` +
+    `<rect x="${x0}" y="${y0}" width="${w}" height="${h}" fill="#ffffff"/>` +
     `<text x="${x0 + pad}" y="${y0 + 28}" style="font-size:16px;font-weight:700;fill:var(--ink)">${esc(title)}</text>` +
     `<text x="${x0 + pad}" y="${y0 + 46}" style="font-size:12px;fill:var(--muted)">${esc(sub)}</text>` +
     world.innerHTML + `</svg>`;
@@ -1749,6 +1876,11 @@ document.addEventListener('keydown', e => {
   else if (ctrl && k === 'c') { if (copySel()) toast('Copied — press Ctrl+V to paste'); }
   else if (ctrl && k === 'v') { e.preventDefault(); paste(); }
   else if (ctrl && k === 'a') { e.preventDefault(); selC = new Set(S.comps.map(c => c.id)); selW = null; render(); }
+  else if (!ctrl && !e.altKey && e.key.length === 1 && LETTERS.slice(0, S.bits).includes(e.key.toUpperCase())) {
+    stopPlay();
+    S.inputs[LETTERS.indexOf(e.key.toUpperCase())] ^= 1;
+    commit();
+  }
   else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelected(); }
   else if (e.key === 'Escape') { if (drag) endDrag(e, true); clearSel(); render(); }
   else if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { e.preventDefault(); stopPlay(); setValue(curValue() + 1); }
@@ -1759,6 +1891,10 @@ window.addEventListener('resize', applyView);
 // ---------- start ----------
 $('#logo').innerHTML = `<svg viewBox="72 40 88 168" width="12" height="22">${SEGS.map(([pts], i) => `<polygon points="${pts}" fill="${i === 6 ? '#3b1a1a' : '#ff3b30'}"/>`).join('')}</svg>`;
 if (NOSOL) document.querySelector('.tab[data-tab="solution"]').remove();
+if (innerWidth < 1100) {   // small screens: give the board room, the check panel opens with its button
+  $('#rightPanel').classList.add('collapsed');
+  $('#toggleTable').classList.remove('active');
+}
 load();
 syncControls();
 render();
