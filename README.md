@@ -28,6 +28,11 @@ code-signed, so Windows SmartScreen may show "Windows protected your PC" the fir
 - **Controller** with 1–8 outputs (bits). A is the most significant bit.
 - **1–4 displays** for bigger numbers (e.g. 0–15 in decimal or 00–FF in hex), with blank or visible leading zeros.
 - **Gates** with 2–4 inputs, constants, and text notes. Drag and drop, then wire pin to pin.
+- **Real 74HC chips** (74HC00/02/04/08/10/11/20/21/27/32/86/4075) drawn as 14-pin DIP packages with the
+  actual datasheet pin numbers, VCC/GND/NC marked, and several gates per package. Every pinout was checked
+  against the Texas Instruments datasheet for that part, so a circuit built here can be rebuilt on a breadboard.
+  The sidebar also works out which chips you would have to buy for the loose gates on your board.
+- **Wire styles**: curved, right angles (like a schematic) or straight lines, under *Drawing* in the left panel.
 - **Realistic LED display** with inputs a–g, as a common cathode or common anode display.
 - **Tasks**: a warm-up, 0–3, 0–7, a BCD decoder, a hex decoder, common anode, and NAND-only / NOR-only challenges.
 - **Check panel**:

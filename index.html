@@ -66,6 +66,13 @@ aside h3:first-child{margin-top:0}
 .pal{border:1px solid var(--line);border-radius:9px;padding:5px 2px 3px;text-align:center;cursor:grab;user-select:none;touch-action:none;background:var(--panel-2);transition:border-color .12s,background .12s,transform .12s}
 .pal:hover{border-color:var(--accent);background:var(--accent-soft);transform:translateY(-1px)}
 .pal.off{opacity:.3;cursor:not-allowed;transform:none;background:var(--panel-2);border-color:var(--line)}
+.h3sub{text-transform:none;letter-spacing:0;font-weight:400;opacity:.7}
+.icpal{display:flex;flex-direction:column;gap:4px}
+.icpal .pal{display:flex;align-items:center;gap:8px;padding:5px 8px;text-align:left}
+.icpal .pal b{margin:0;font-size:12px;font-family:ui-monospace,Consolas,monospace;letter-spacing:0}
+.icpal .pal span{font-size:11px;color:var(--muted);line-height:1.2}
+.icpal .pal .dip{flex:0 0 auto}
+.ictt td.unused,.ictt tr.unused td{color:var(--muted);opacity:.6}
 .pal svg{display:block;margin:0 auto;overflow:visible}
 .pal b{font-size:11px;display:block;margin-top:1px;letter-spacing:.02em}
 #selpanel p{margin:4px 0}
@@ -229,6 +236,12 @@ svg text{pointer-events:none;user-select:none}
 .chipsub{fill:#94a3b8;font-size:11px}
 .chipval{fill:#fff;font-size:20px;font-weight:800}
 .chipnotch{fill:#111827}
+.icname{fill:#f8fafc;font-size:14px;font-weight:700;font-family:ui-monospace,Consolas,monospace}
+.icsub{fill:#94a3b8;font-size:10.5px}
+.icpin{fill:#e2e8f0;font-size:10.5px;font-weight:700;font-family:ui-monospace,Consolas,monospace}
+.icpwr{fill:#fca5a5;font-size:10.5px;font-weight:700;font-family:ui-monospace,Consolas,monospace}
+.icnc{fill:#64748b;font-size:10.5px;font-family:ui-monospace,Consolas,monospace}
+.icnum{fill:var(--muted);font-size:8.5px;font-weight:700}
 .bezelbox{fill:#262626;stroke:#0a0a0a;stroke-width:2}
 .bezel{fill:#0d0d0d}
 .plbl{fill:#d4d4d4;font-size:13px;font-weight:700;font-family:ui-monospace,Consolas,monospace}
@@ -319,10 +332,21 @@ svg text{pointer-events:none;user-select:none}
 </header>
 
 <div class="main">
-  <aside class="left">
+  <aside class="left" id="paletteWrap">
     <h3>Components</h3>
     <div id="palette" class="palette"></div>
     <p class="hint">Drag onto the board, or click to add.</p>
+    <h3>IC chips <span class="h3sub">74HC series</span></h3>
+    <div id="icpalette" class="icpal"></div>
+    <p class="hint">Real 14-pin chips with several gates inside. Pin numbers match the datasheet.</p>
+    <h3>Drawing</h3>
+    <label class="row">Wires
+      <select id="wireStyle" title="How wires are drawn">
+        <option value="curve">Curved</option>
+        <option value="ortho">Right angles</option>
+        <option value="straight">Straight</option>
+      </select>
+    </label>
     <h3>Selected</h3>
     <div id="selpanel"></div>
     <h3>Gates used</h3>
@@ -391,6 +415,8 @@ svg text{pointer-events:none;user-select:none}
   <h4>Controls</h4>
   <ul>
     <li><b>Add:</b> drag a component from the left panel, or click it. <b>NOTE</b> adds a text note (double-click it to edit).</li>
+    <li><b>IC chips:</b> below the gates you can add real 74HC chips, e.g. <b>74HC08</b> (four AND gates in one package). The pin numbers are the real ones from the datasheet, so you can wire the same circuit on a breadboard afterwards. <b>VCC</b> and <b>GND</b> are marked in red — a real chip needs them, but the simulator powers the chip for you. Select a chip to see which of its gates are still free.</li>
+    <li><b>Wires:</b> under <b>Drawing</b> on the left you can switch between curved, right-angle and straight wires. Right angles look like a real schematic.</li>
     <li><b>Wire:</b> drag from a pin (small circle) to another pin, or click one pin and then the other. The pins you can connect to light up blue. One output can feed many inputs.</li>
     <li><b>Understand a gate:</b> click it to see its truth table, its current values and the formula its output computes. Hover over a part to highlight its wires.</li>
     <li><b>Move or remove a wire:</b> drag it off the input pin. Drop it on empty space to delete it.</li>
@@ -451,6 +477,24 @@ function modeLabel(mode, n = 1) {
   if (mode === 'hex') return `Hex ${'0'.repeat(n)}–${'F'.repeat(n)}`;
   return mode === 'dec' ? `0–${dmax} (${dmax + 1}+ = don't care)` : `0–${dmax} (${dmax + 1}+ = blank)`;
 }
+// 74HC logic ICs. pins[u] = [input pin numbers..., output pin number] for unit u.
+// Every pinout below was checked against the Texas Instruments datasheet for that part.
+const ICS = {
+  '74HC00': {gate:'NAND', desc:'Quad 2-input NAND', pins:[[1,2,3],[4,5,6],[9,10,8],[12,13,11]]},
+  '74HC02': {gate:'NOR',  desc:'Quad 2-input NOR',  pins:[[2,3,1],[5,6,4],[8,9,10],[11,12,13]]},
+  '74HC04': {gate:'NOT',  desc:'Hex inverter (NOT)',pins:[[1,2],[3,4],[5,6],[9,8],[11,10],[13,12]]},
+  '74HC08': {gate:'AND',  desc:'Quad 2-input AND',  pins:[[1,2,3],[4,5,6],[9,10,8],[12,13,11]]},
+  '74HC10': {gate:'NAND', desc:'Triple 3-input NAND', pins:[[1,2,13,12],[3,4,5,6],[9,10,11,8]]},
+  '74HC11': {gate:'AND',  desc:'Triple 3-input AND',  pins:[[1,2,13,12],[3,4,5,6],[9,10,11,8]]},
+  '74HC20': {gate:'NAND', desc:'Dual 4-input NAND',   pins:[[1,2,4,5,6],[9,10,12,13,8]]},
+  '74HC21': {gate:'AND',  desc:'Dual 4-input AND',    pins:[[1,2,4,5,6],[9,10,12,13,8]]},
+  '74HC27': {gate:'NOR',  desc:'Triple 3-input NOR',  pins:[[1,2,13,12],[3,4,5,6],[9,10,11,8]]},
+  '74HC32': {gate:'OR',   desc:'Quad 2-input OR',   pins:[[1,2,3],[4,5,6],[9,10,8],[12,13,11]]},
+  '74HC86': {gate:'XOR',  desc:'Quad 2-input XOR',  pins:[[1,2,3],[4,5,6],[9,10,8],[12,13,11]]},
+  '74HC4075': {gate:'OR', desc:'Triple 3-input OR',  pins:[[3,4,5,6],[1,2,8,9],[11,12,13,10]]},
+};
+const IC_NAMES = Object.keys(ICS);
+const IC_W = 130, IC_ROWS = 7, IC_ROW = 30, IC_H = IC_ROWS * IC_ROW;
 const LETTERS = 'ABCDEFGH';
 // colours used for the exported picture (always light, so it prints well)
 const LIGHT_VARS = {'--panel':'#ffffff', '--ink':'#1e293b', '--muted':'#64748b', '--line':'#dde3ec', '--accent':'#2563eb',
@@ -465,6 +509,38 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const uid = () => Math.random().toString(36).slice(2, 9);
 const esc = s => String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const fixed = c => c.type === 'CTRL' || c.type === 'DISP';
+const isIC = c => c.type === 'IC' && !!ICS[c.chip];
+const icSpec = c => ICS[c.chip];
+const icNIns = c => icSpec(c).pins[0].length - 1;
+// pins 1..7 run down the left side, 14..8 down the right side (standard DIP)
+function icPinPos(num) {
+  const left = num <= IC_ROWS;
+  const row = left ? num - 1 : IC_ROWS * 2 - num;
+  return {left, num, x: left ? -20 : IC_W + 20, y: IC_ROW / 2 + row * IC_ROW};
+}
+// power and unused pins: everything the logic units do not use
+function icPowerPins(c) {
+  const used = new Set(icSpec(c).pins.flat());
+  const out = [];
+  for (let n = 1; n <= IC_ROWS * 2; n++) {
+    if (!used.has(n)) out.push({num: n, name: n === IC_ROWS ? 'GND' : n === IC_ROWS * 2 ? 'VCC' : 'NC'});
+  }
+  return out;
+}
+const unitLabel = (u, i) => `${u + 1}${i === null ? 'Y' : 'ABCD'[i]}`;
+// logic units of a part: a gate has one, an IC has one per gate inside it
+function unitsOf(c) {
+  if (isGate(c.type)) {
+    const n = c.type === 'NOT' ? 1 : (c.n || 2);
+    return [{type: c.type, out: 0, ins: Array.from({length: n}, (_, i) => i)}];
+  }
+  if (isIC(c)) {
+    const n = icNIns(c);
+    return icSpec(c).pins.map((_, u) => ({type: icSpec(c).gate, out: u,
+      ins: Array.from({length: n}, (_, i) => u * n + i)}));
+  }
+  return [];
+}
 
 // ---------- state ----------
 let S;
@@ -486,7 +562,8 @@ const NOSOL = new URLSearchParams(location.search).has('nosolution');   // ?noso
 const svg = $('#svg'), world = $('#world'), viewport = $('#viewport');
 
 function defaultState() {
-  return {bits: 4, mode: 'hex', disp: 'cc', disps: 1, lead: 'blank', task: 'free', allowed: null, inputs: [0,0,0,0],
+  return {bits: 4, mode: 'hex', disp: 'cc', disps: 1, lead: 'blank', wireStyle: 'curve',
+    task: 'free', allowed: null, inputs: [0,0,0,0],
     comps: [{id:'ctrl', type:'CTRL', x:40, y:60}, {id:'disp', type:'DISP', x:760, y:60}],
     wires: []};
 }
@@ -499,12 +576,14 @@ function normalize(o) {
   const s = {bits, mode: ['hex','dec','decblank'].includes(o.mode) ? o.mode : 'hex',
     disp: o.disp === 'ca' ? 'ca' : 'cc',
     disps, lead: o.lead === 'zero' ? 'zero' : 'blank',
+    wireStyle: ['curve','ortho','straight'].includes(o.wireStyle) ? o.wireStyle : 'curve',
     task: TASKS.some(t => t.id === o.task) ? o.task : 'free',
     allowed: allowed.length ? allowed : null,
     inputs: [], comps: [], wires: []};
   const idOk = id => typeof id === 'string' && /^[\w-]{1,40}$/.test(id);
   for (const c of o.comps) {
-    if (!c || !(isGate(c.type) || ['CTRL','DISP','CONST','NOTE'].includes(c.type))) continue;
+    if (!c || !(isGate(c.type) || ['CTRL','DISP','CONST','NOTE'].includes(c.type) ||
+                (c.type === 'IC' && ICS[c.chip]))) continue;
     let id = c.type === 'CTRL' ? 'ctrl' : (idOk(c.id) ? c.id : uid());
     if (c.type === 'DISP') {   // displays are disp (ones), disp1 (tens), disp2, disp3
       const m = /^disp([1-3]?)$/.exec(c.id || 'disp');
@@ -516,6 +595,7 @@ function normalize(o) {
     if (isGate(c.type) && c.type !== 'NOT') nc.n = clamp(parseInt(c.n) || 2, 2, 4);
     if (c.type === 'CONST') nc.value = c.value ? 1 : 0;
     if (c.type === 'NOTE') nc.text = String(c.text == null ? '' : c.text).slice(0, 500);
+    if (c.type === 'IC') nc.chip = c.chip;
     s.comps.push(nc);
   }
   if (!s.comps.some(c => c.id === 'ctrl')) s.comps.unshift({id:'ctrl', type:'CTRL', x:40, y:60});
@@ -562,8 +642,21 @@ const comp = id => S.comps.find(c => c.id === id);
 const curValue = () => S.inputs.reduce((a, b) => a * 2 + b, 0);
 const toInputs = v => Array.from({length: S.bits}, (_, i) => (v >> (S.bits - 1 - i)) & 1);
 const taskOf = () => TASKS.find(t => t.id === S.task) || TASKS[0];
-const allowedType = t => !isGate(t) || !S.allowed || S.allowed.includes(t);
-const gateCount = () => S.comps.filter(c => isGate(c.type)).length;
+function allowedType(t) {
+  if (!S.allowed) return true;
+  if (ICS[t]) return S.allowed.includes(ICS[t].gate);
+  return !isGate(t) || S.allowed.includes(t);
+}
+const wiredOut = (cid, p) => S.wires.some(w => w.from.c === cid && w.from.p === p);
+// gates in use: every discrete gate, plus the IC units whose output is wired up
+function gateCount() {
+  let n = 0;
+  for (const c of S.comps) {
+    if (isGate(c.type)) n++;
+    else if (isIC(c)) n += unitsOf(c).filter(u => wiredOut(c.id, u.out)).length;
+  }
+  return n;
+}
 
 // ---------- geometry ----------
 function gateGeom(c) {
@@ -593,11 +686,13 @@ function inPinsLocal(c) {
     const {n, h} = gateGeom(c);
     return Array.from({length: n}, (_, i) => ({x: -20, y: h / 2 - (n - 1) * 10 + i * 20}));
   }
+  if (isIC(c)) return icSpec(c).pins.flatMap(p => p.slice(0, -1).map(icPinPos));
   if (c.type === 'DISP') return Array.from({length: 7}, (_, i) => ({x: -20, y: 50 + i * 30}));
   return [];
 }
 function outPinsLocal(c, bits = S.bits) {
   if (isGate(c.type)) { const {h, outX} = gateGeom(c); return [{x: outX, y: h / 2}]; }
+  if (isIC(c)) return icSpec(c).pins.map(p => icPinPos(p[p.length - 1]));
   if (c.type === 'CTRL') return Array.from({length: bits}, (_, i) => ({x: 160, y: 60 + i * 40}));
   if (c.type === 'CONST') return [{x: 60, y: 20}];
   return [];
@@ -606,6 +701,7 @@ function compBox(c) {
   if (isGate(c.type)) { const {h, outX} = gateGeom(c); return {x0: c.x - 20, y0: c.y, x1: c.x + outX, y1: c.y + h}; }
   if (c.type === 'CTRL') return {x0: c.x, y0: c.y, x1: c.x + 160, y1: c.y + 50 + S.bits * 40};
   if (c.type === 'DISP') return {x0: c.x - 20, y0: c.y, x1: c.x + 180, y1: c.y + 264};
+  if (isIC(c)) return {x0: c.x - 20, y0: c.y, x1: c.x + IC_W + 20, y1: c.y + IC_H};
   if (c.type === 'NOTE') { const g = noteGeom(c); return {x0: c.x, y0: c.y, x1: c.x + g.w, y1: c.y + g.h}; }
   return {x0: c.x, y0: c.y, x1: c.x + 60, y1: c.y + 40};
 }
@@ -628,15 +724,51 @@ function srcName(from, byId) {
   if (!c) return '?';
   if (c.type === 'CTRL') return LETTERS[from.p];
   if (c.type === 'CONST') return 'constant ' + (c.value ? 1 : 0);
+  if (isIC(c)) { const p = icSpec(c).pins[from.p]; return `${c.chip} pin ${p[p.length - 1]} (${unitLabel(from.p, null)})`; }
   return c.type + ' output';
 }
 function dstName(to, byId) {
   const c = byId.get(to.c);
   if (!c) return '?';
+  if (isIC(c)) {
+    const n = icNIns(c), u = Math.floor(to.p / n), i = to.p % n;
+    return `${c.chip} pin ${icSpec(c).pins[u][i]} (${unitLabel(u, i)})`;
+  }
   if (c.type !== 'DISP') return `${c.type} input ${to.p + 1}`;
   return (S.disps > 1 ? dispName(dispIndex(c.id)).toLowerCase() + ' ' : '') + 'segment ' + SEG[to.p];
 }
-function wirePath(a, b) {
+// path through the given corner points, with the corners rounded off
+function roundedPoly(pts, r) {
+  const p = pts.filter((q, i) => i === 0 || Math.hypot(q.x - pts[i - 1].x, q.y - pts[i - 1].y) > 0.5);
+  if (p.length < 2) return `M${pts[0].x} ${pts[0].y}`;
+  let d = `M${p[0].x} ${p[0].y}`;
+  for (let i = 1; i < p.length - 1; i++) {
+    const c = p[i], a = p[i - 1], b = p[i + 1];
+    const d1 = Math.hypot(c.x - a.x, c.y - a.y), d2 = Math.hypot(b.x - c.x, b.y - c.y);
+    const rr = Math.min(r, d1 / 2, d2 / 2);
+    const f = (q, dist) => ({x: +(c.x + (q.x - c.x) / dist * rr).toFixed(1), y: +(c.y + (q.y - c.y) / dist * rr).toFixed(1)});
+    const s = f(a, d1), e = f(b, d2);
+    d += ` L${s.x} ${s.y} Q${c.x} ${c.y} ${e.x} ${e.y}`;
+  }
+  const l = p[p.length - 1];
+  return d + ` L${l.x} ${l.y}`;
+}
+function wirePath(a, b, fromComp) {
+  const style = S.wireStyle || 'curve';
+  if (style === 'straight') return `M${a.x} ${a.y} L${b.x} ${b.y}`;
+  if (style === 'ortho') {
+    if (Math.abs(a.y - b.y) < 1.5) return `M${a.x} ${a.y} L${b.x} ${b.y}`;
+    // an IC output can sit on the left side of the package, so keep the
+    // corner clear of the body: the wire then reads as passing behind it
+    const clear = fromComp && isIC(fromComp) ? compBox(fromComp).x1 + 20 : a.x + 25;
+    if (b.x - a.x >= 40) {
+      const mx = snap(Math.max((a.x + b.x) / 2, Math.min(clear, b.x - 25)));
+      return roundedPoly([a, {x: mx, y: a.y}, {x: mx, y: b.y}, b], 8);
+    }
+    // the target sits behind the source: step out, run back through the gap, step in
+    const ax = snap(clear), bx = b.x - 25, my = snap((a.y + b.y) / 2);
+    return roundedPoly([a, {x: ax, y: a.y}, {x: ax, y: my}, {x: bx, y: my}, {x: bx, y: b.y}, b], 8);
+  }
   const d = Math.max(30, Math.abs(b.x - a.x) * 0.5);
   return `M${a.x} ${a.y} C${a.x + d} ${a.y} ${b.x - d} ${b.y} ${b.x} ${b.y}`;
 }
@@ -662,9 +794,9 @@ function buildIndex() {
 function evaluate(inVals, idx) {
   const out = new Map(), gates = [];
   for (const c of S.comps) {
-    if (c.type === 'CTRL') inVals.forEach((v, i) => out.set(c.id + ':' + i, v));
-    else if (c.type === 'CONST') out.set(c.id + ':0', c.value ? 1 : 0);
-    else if (isGate(c.type)) { out.set(c.id + ':0', 0); gates.push(c); }
+    if (c.type === 'CTRL') { inVals.forEach((v, i) => out.set(c.id + ':' + i, v)); continue; }
+    if (c.type === 'CONST') { out.set(c.id + ':0', c.value ? 1 : 0); continue; }
+    for (const u of unitsOf(c)) { out.set(c.id + ':' + u.out, 0); gates.push({c, u}); }
   }
   const src = (cid, p) => {
     const w = idx.inMap.get(cid + ':' + p);
@@ -673,11 +805,10 @@ function evaluate(inVals, idx) {
   let stable = false;
   for (let it = 0; it < gates.length + 3 && !stable; it++) {
     stable = true;
-    for (const g of gates) {
-      const n = g.type === 'NOT' ? 1 : g.n, ins = [];
-      for (let i = 0; i < n; i++) ins.push(src(g.id, i) || 0);
-      const v = gateFn(g.type, ins);
-      if (out.get(g.id + ':0') !== v) { out.set(g.id + ':0', v); stable = false; }
+    for (const {c, u} of gates) {
+      const ins = u.ins.map(i => src(c.id, i) || 0);
+      const v = gateFn(u.type, ins), key = c.id + ':' + u.out;
+      if (out.get(key) !== v) { out.set(key, v); stable = false; }
     }
   }
   return {out, disps: Array.from({length: S.disps}, (_, k) => Array.from({length: 7}, (_, i) => src(dispId(k), i))), stable};
@@ -746,25 +877,27 @@ function exprMaker(idx) {
     const c = idx.byId.get(cid);
     if (c.type === 'CTRL') return {h: `<i>${LETTERS[p]}</i>`, p: 3};
     if (c.type === 'CONST') return {h: String(c.value ? 1 : 0), p: 3};
-    if (memo.has(cid)) return memo.get(cid);
-    if (visiting.has(cid)) return {h: '⟲', p: 3};
-    visiting.add(cid);
-    const n = c.type === 'NOT' ? 1 : c.n, ch = [];
-    for (let i = 0; i < n; i++) ch.push(src(cid, i));
+    const key = cid + ':' + p;
+    if (memo.has(key)) return memo.get(key);
+    if (visiting.has(key)) return {h: '⟲', p: 3};
+    const unit = unitsOf(c).find(u => u.out === p);
+    if (!unit) return {h: '0', p: 3};
+    visiting.add(key);
+    const ch = unit.ins.map(i => src(cid, i));
     const par = (x, need) => need(x.p) ? `(${x.h})` : x.h;
     let r;
-    if (c.type === 'NOT') r = {h: ov(ch[0].h), p: 3};
+    if (unit.type === 'NOT') r = {h: ov(ch[0].h), p: 3};
     else {
-      const base = BASE[c.type];
+      const base = BASE[unit.type];
       let inner;
       if (base === 'AND') inner = {h: ch.map(x => par(x, q => q < 2)).join('·'), p: 2};
       else if (base === 'OR') inner = {h: ch.map(x => par(x, q => q === 1)).join(' + '), p: 0};
       else inner = {h: ch.map(x => par(x, q => q === 0)).join(' ⊕ '), p: 1};
-      r = INV.has(c.type) ? {h: ov(inner.h), p: 3} : inner;
+      r = INV.has(unit.type) ? {h: ov(inner.h), p: 3} : inner;
     }
     if (r.h.length > 2500) r = {h: '…', p: 3};
-    visiting.delete(cid);
-    memo.set(cid, r);
+    visiting.delete(key);
+    memo.set(key, r);
     return r;
   }
   return node;
@@ -882,6 +1015,27 @@ function renderComp(c, res, idx) {
       s += `<text class="${good ? 'good' : 'nogood'}" x="168" y="250" text-anchor="end">${good ? '✓' : '✗'}</text>`;
     }
     inLbl = i => `Segment ${SEG[i]}`;
+  } else if (isIC(c)) {
+    const spec = icSpec(c), n = icNIns(c);
+    s += `<rect class="chip" x="0" y="0" width="${IC_W}" height="${IC_H}" rx="8"/>`;
+    s += `<path class="chipnotch" d="M${IC_W / 2 - 12} 0 A12 12 0 0 0 ${IC_W / 2 + 12} 0 Z"/>`;
+    s += `<text class="icname" x="${IC_W / 2}" y="${IC_H / 2 - 2}" text-anchor="middle">${c.chip}</text>`;
+    s += `<text class="icsub" x="${IC_W / 2}" y="${IC_H / 2 + 13}" text-anchor="middle">${spec.pins.length} × ${spec.gate}</text>`;
+    // every pin: stub, number outside, signal name inside
+    const drawPin = (num, name, cls) => {
+      const q = icPinPos(num);
+      const ex = q.left ? 0 : IC_W;
+      let t = `<line class="stub" x1="${q.x}" y1="${q.y}" x2="${ex}" y2="${q.y}"/>`;
+      t += `<text class="icnum" x="${q.left ? q.x + 12 : q.x - 12}" y="${q.y - 5}" text-anchor="middle">${num}</text>`;
+      t += `<text class="${cls}" x="${q.left ? 9 : IC_W - 9}" y="${q.y + 4}" text-anchor="${q.left ? 'start' : 'end'}">${name}</text>`;
+      return t;
+    };
+    spec.pins.forEach((pins, u) => {
+      pins.forEach((num, i) => { s += drawPin(num, unitLabel(u, i < n ? i : null), 'icpin'); });
+    });
+    for (const p of icPowerPins(c)) s += drawPin(p.num, p.name, p.name === 'NC' ? 'icnc' : 'icpwr');
+    inLbl = i => `${c.chip} pin ${spec.pins[Math.floor(i / n)][i % n]} · ${unitLabel(Math.floor(i / n), i % n)}`;
+    outLbl = u => `${c.chip} pin ${spec.pins[u][n]} · ${unitLabel(u, null)} (output)`;
   } else if (c.type === 'CONST') {
     s += `<rect class="box" x="0" y="0" width="40" height="40" rx="6"/>`;
     s += `<text class="cval" x="20" y="27" text-anchor="middle">${c.value ? 1 : 0}</text>`;
@@ -912,7 +1066,7 @@ function render() {
   for (const w of S.wires) {
     const a = pinWorld(w.from.c, 'out', w.from.p, idx.byId), b = pinWorld(w.to.c, 'in', w.to.p, idx.byId);
     if (!a || !b) continue;
-    const d = wirePath(a, b), v = res.out.get(w.from.c + ':' + w.from.p) ? 1 : 0;
+    const d = wirePath(a, b, idx.byId.get(w.from.c)), v = res.out.get(w.from.c + ':' + w.from.p) ? 1 : 0;
     h += `<g class="wg" data-a="${w.from.c}" data-b="${w.to.c}">${selW === w.id ? `<path class="wire-sel" d="${d}"/>` : ''}<path class="wire ${v ? 'on' : 'off'}" d="${d}"/>` +
          `<path class="wire-hit" data-wire="${w.id}" d="${d}"><title>${srcName(w.from, idx.byId)} → ${dstName(w.to, idx.byId)} = ${v}</title></path></g>`;
   }
@@ -934,9 +1088,9 @@ function render() {
   renderStats();
   applyHover();
   document.querySelectorAll('.pal').forEach(p => p.classList.toggle('off', !allowedType(p.dataset.type)));
-  $('#emptyHint').hidden = S.comps.some(c => isGate(c.type) || c.type === 'CONST') || S.wires.length > 0;
+  $('#emptyHint').hidden = S.comps.some(c => isGate(c.type) || isIC(c) || c.type === 'CONST') || S.wires.length > 0;
   $('#taskBtn').textContent = '📋 ' + (S.task === 'free' ? 'Tasks' : taskOf().title);
-  const sig = JSON.stringify([S.wires, S.comps.map(c => [c.id, c.type, c.n, c.value]), S.bits, S.mode, S.disp, S.inputs,
+  const sig = JSON.stringify([S.wires, S.comps.map(c => [c.id, c.type, c.n, c.value, c.chip]), S.bits, S.mode, S.disp, S.inputs,
                               S.task, S.allowed, tableView, tab, kmapSeg, [...revealed], dispSel, S.disps, S.lead]);
   if (sig !== lastAnaSig) { lastAnaSig = sig; renderAnalysis(idx); }
   $('#undo').disabled = !undoStack.length;
@@ -963,6 +1117,27 @@ function gateInputs(c, res, idx) {
     return w ? (res.out.get(w.from.c + ':' + w.from.p) || 0) : null;
   });
 }
+// live state of every gate inside a chip
+function icDetails(c, res, idx) {
+  const spec = icSpec(c), n = icNIns(c);
+  let rows = '';
+  spec.pins.forEach((pins, u) => {
+    const ins = unitsOf(c)[u].ins.map(i => {
+      const w = idx.inMap.get(c.id + ':' + i);
+      return w ? (res.out.get(w.from.c + ':' + w.from.p) || 0) : null;
+    });
+    const used = wiredOut(c.id, u) || ins.some(v => v !== null);
+    const o = res.out.get(c.id + ':' + u) || 0;
+    rows += `<tr${used ? '' : ' class="unused"'}><td>${u + 1}</td>` +
+      `<td>${pins.slice(0, n).join(', ')}</td><td>${ins.map(v => v === null ? '·' : v).join(' ')}</td>` +
+      `<td>${pins[n]}</td><td class="${used && o ? 'o1' : ''}">${used ? o : '–'}</td></tr>`;
+  });
+  const free = spec.pins.filter((_, u) => !wiredOut(c.id, u)).length;
+  const pwr = icPowerPins(c).filter(p => p.name !== 'NC');
+  return `<table class="gtt ictt"><tr><th>Gate</th><th>In pins</th><th>In</th><th>Out pin</th><th>Out</th></tr>${rows}</table>` +
+    `<p class="hint">${free ? `${free} of ${spec.pins.length} gates still free.` : 'All gates in use.'} ` +
+    `Power: ${pwr.map(p => `pin ${p.num} = ${p.name}`).join(', ')}.</p>`;
+}
 // live values, formula and truth table for the selected gate
 function gateDetails(c, res, idx) {
   const ins = gateInputs(c, res, idx), n = ins.length, out = res.out.get(c.id + ':0') || 0;
@@ -984,7 +1159,10 @@ function renderSel(res, idx) {
   const c = ids.length === 1 ? comp(ids[0]) : null;
   const selWire = selW ? S.wires.find(w => w.id === selW) : null;
   const sig = JSON.stringify([ids, selW, c, S.bits,
-    c && isGate(c.type) ? [gateInputs(c, res, idx), res.out.get(c.id + ':0'), S.wires] : null,
+    c && (isGate(c.type) || isIC(c)) ? [unitsOf(c).map(u => [u.ins.map(i => {
+      const w = idx.inMap.get(c.id + ':' + i);
+      return w ? res.out.get(w.from.c + ':' + w.from.p) : null;
+    }), res.out.get(c.id + ':' + u.out)]), S.wires] : null,
     selWire ? res.out.get(selWire.from.c + ':' + selWire.from.p) : null]);
   if (sig === lastSelSig) return;
   lastSelSig = sig;
@@ -1003,7 +1181,10 @@ function renderSel(res, idx) {
     return;
   }
   if (!c) { clearSel(); el.innerHTML = ''; return; }
-  if (isGate(c.type)) {
+  if (isIC(c)) {
+    el.innerHTML = `<p><b>${c.chip}</b></p><p class="hint">${icSpec(c).desc}. ${GATE_INFO[icSpec(c).gate]}</p>
+      ${icDetails(c, res, idx)}${actions}`;
+  } else if (isGate(c.type)) {
     el.innerHTML = `<p><b>${c.type} gate</b></p>
       <label class="row">Type <select id="selType">${GATE_TYPES.map(t => `<option${t === c.type ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
       ${c.type !== 'NOT' ? `<div class="row">Inputs <button class="btn sm" data-act="nminus" ${c.n <= 2 ? 'disabled' : ''}>−</button><b>${c.n}</b><button class="btn sm" data-act="nplus" ${c.n >= 4 ? 'disabled' : ''}>+</button></div>` : ''}
@@ -1020,14 +1201,45 @@ function renderSel(res, idx) {
   }
 }
 
+// which chips you would have to buy to build the discrete gates for real
+function chipsNeeded() {
+  const want = new Map();     // "AND:2" -> how many such gates
+  for (const c of S.comps) {
+    if (!isGate(c.type)) continue;
+    const k = c.type + ':' + (c.type === 'NOT' ? 1 : c.n);
+    want.set(k, (want.get(k) || 0) + 1);
+  }
+  const chips = new Map(), missing = [];
+  for (const [k, cnt] of want) {
+    const [type, n] = k.split(':');
+    // a chip with more inputs still works: tie the spare inputs to a used one
+    const fits = IC_NAMES.filter(name => ICS[name].gate === type && ICS[name].pins[0].length - 1 >= +n)
+                         .sort((a, b) => (ICS[a].pins[0].length - ICS[b].pins[0].length) || ICS[b].pins.length - ICS[a].pins.length);
+    if (!fits.length) { missing.push(`${cnt} × ${n}-input ${type}`); continue; }
+    const name = fits[0];
+    chips.set(name, (chips.get(name) || 0) + cnt / ICS[name].pins.length);
+  }
+  return {chips: [...chips].map(([name, v]) => `${Math.ceil(v)} × ${name}`), missing};
+}
 function renderStats() {
-  const counts = {};
-  for (const c of S.comps) if (isGate(c.type)) counts[c.type] = (counts[c.type] || 0) + 1;
-  const tot = gateCount();
-  $('#stats').innerHTML = tot
-    ? GATE_TYPES.filter(t => counts[t]).map(t => `<div class="st-row"><span>${t}</span><span>× ${counts[t]}</span></div>`).join('') +
-      `<div class="st-row tot"><span>Total</span><span>${tot}</span></div>`
-    : '<p class="hint">No gates yet.</p>';
+  const counts = {}, chips = {};
+  for (const c of S.comps) {
+    if (isGate(c.type)) counts[c.type] = (counts[c.type] || 0) + 1;
+    else if (isIC(c)) chips[c.chip] = (chips[c.chip] || 0) + 1;
+  }
+  const tot = gateCount(), names = Object.keys(chips).sort();
+  if (!tot && !names.length) { $('#stats').innerHTML = '<p class="hint">No gates yet.</p>'; return; }
+  let h = GATE_TYPES.filter(t => counts[t]).map(t => `<div class="st-row"><span>${t}</span><span>× ${counts[t]}</span></div>`).join('');
+  h += names.map(n => `<div class="st-row"><span>${n}</span><span>× ${chips[n]}</span></div>`).join('');
+  const inChips = names.reduce((a, n) => a + chips[n] * ICS[n].pins.length, 0);
+  h += `<div class="st-row tot"><span>Gates in use</span><span>${tot}</span></div>`;
+  if (inChips) h += `<div class="st-row"><span class="hint">Gates on chips</span><span class="hint">${inChips}</span></div>`;
+  if (Object.keys(counts).length) {
+    const {chips: need, missing} = chipsNeeded();
+    h += `<p class="hint" style="margin-top:8px">To build the loose gates for real: <b>${need.join(', ') || '–'}</b>` +
+         `${missing.length ? ` <span class="stbad">No common 74HC chip holds ${missing.join(' or ')} — split those into smaller gates.</span>` : ''}</p>`;
+  }
+  $('#stats').innerHTML = h;
 }
 
 function compressRanges(list) {
@@ -1440,7 +1652,8 @@ function nearestPin(kind, x, y) {
 function addComp(type, x, y) {
   if (!allowedType(type)) { toast(`Only ${S.allowed.join(', ')} gates are allowed in this task.`); return; }
   pushUndo();
-  const c = {id: uid(), type, x: snap(x), y: snap(y)};
+  const c = ICS[type] ? {id: uid(), type: 'IC', chip: type, x: snap(x), y: snap(y)}
+                      : {id: uid(), type, x: snap(x), y: snap(y)};
   if (isGate(type) && type !== 'NOT') c.n = 2;
   if (type === 'CONST') c.value = 1;
   if (type === 'NOTE') c.text = 'Double-click to write a note';
@@ -1741,6 +1954,18 @@ function fit() {
 function paletteIcon(t) {
   if (t === 'CONST') return `<svg viewBox="-4 -4 72 48" width="58" height="26"><rect class="box" x="0" y="0" width="40" height="40" rx="6"/><text class="cval" x="20" y="27" text-anchor="middle">1</text><line class="stub" x1="40" y1="20" x2="60" y2="20"/></svg>`;
   if (t === 'NOTE') return `<svg viewBox="-4 -4 72 48" width="58" height="26"><rect class="note" x="4" y="2" width="56" height="36" rx="4"/><text class="notetxt" x="32" y="25" text-anchor="middle" style="font-size:15px;font-weight:700">Aa</text></svg>`;
+  if (ICS[t]) {
+    const r = 7, w = 26, h = 38;
+    let p = '';
+    for (let i = 0; i < r; i++) {
+      const y = 3 + i * 5.2;
+      p += `<rect x="-4" y="${y}" width="4" height="2.4" fill="#94a3b8"/><rect x="${w}" y="${y}" width="4" height="2.4" fill="#94a3b8"/>`;
+    }
+    return `<svg class="dip" viewBox="-5 0 36 ${h}" width="30" height="32">${p}` +
+      `<rect x="0" y="0" width="${w}" height="${h}" rx="3" fill="#1f2937"/>` +
+      `<path d="M${w / 2 - 4} 0 A4 4 0 0 0 ${w / 2 + 4} 0 Z" fill="#111827"/>` +
+      `<text x="${w / 2}" y="${h / 2 + 4}" text-anchor="middle" fill="#cbd5e1" style="font-size:9px;font-weight:700">${ICS[t].pins.length}×</text></svg>`;
+  }
   return `<svg viewBox="-24 -4 118 48" width="64" height="26">${gateShape(t, t === 'NOT' ? 1 : 2, 40)}</svg>`;
 }
 const PAL_TYPES = [...GATE_TYPES, 'CONST', 'NOTE'];
@@ -1748,8 +1973,10 @@ const PAL_NAME = {CONST: 'CONST 0/1', NOTE: 'NOTE'};
 const palEl = $('#palette');
 palEl.innerHTML = PAL_TYPES.map(t =>
   `<div class="pal" data-type="${t}" title="${t === 'CONST' ? 'Constant 0 or 1' : t === 'NOTE' ? 'Text note' : t + ' gate'}">${paletteIcon(t)}<b>${PAL_NAME[t] || t}</b></div>`).join('');
+$('#icpalette').innerHTML = IC_NAMES.map(t =>
+  `<div class="pal" data-type="${t}" title="${t} — ${ICS[t].desc}">${paletteIcon(t)}<div><b>${t}</b><br><span>${ICS[t].desc}</span></div></div>`).join('');
 const ghost = $('#ghost');
-palEl.addEventListener('pointerdown', e => {
+$('#paletteWrap').addEventListener('pointerdown', e => {
   const item = e.target.closest('.pal');
   if (!item) return;
   e.preventDefault();
@@ -1768,7 +1995,7 @@ document.addEventListener('pointerup', e => {
   pal = null;
   ghost.style.display = 'none';
   const r = svg.getBoundingClientRect();
-  const h = isGate(p0.type) ? gateGeom({type: p0.type, n: 2}).h : 40;
+  const h = ICS[p0.type] ? IC_H : isGate(p0.type) ? gateGeom({type: p0.type, n: 2}).h : 40;
   if (p0.moved) {
     if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
       const w = toWorld(e);
@@ -1841,6 +2068,7 @@ $('#taskCard').addEventListener('click', e => {
 });
 
 function syncControls() {
+  $('#wireStyle').value = S.wireStyle || 'curve';
   $('#bits').value = S.bits;
   $('#disps').value = S.disps;
   $('#lead').value = S.lead;
@@ -1852,6 +2080,7 @@ function syncControls() {
 }
 $('#bits').addEventListener('change', e => manualSetting(() => applySettings(+e.target.value, S.mode, S.disp, S.disps, S.lead)));
 $('#disps').addEventListener('change', e => { manualSetting(() => setDisplays(+e.target.value)); syncControls(); fit(); });
+$('#wireStyle').addEventListener('change', e => { S.wireStyle = e.target.value; commit(); });
 $('#lead').addEventListener('change', e => manualSetting(() => { S.lead = e.target.value; }));
 $('#mode').addEventListener('change', e => manualSetting(() => { S.mode = e.target.value; }));
 $('#disptype').addEventListener('change', e => manualSetting(() => { S.disp = e.target.value; }));
