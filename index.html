@@ -184,6 +184,8 @@ table.kmap{border-collapse:separate;border-spacing:3px;font-family:ui-monospace,
 .gtt td.o1{color:var(--ok-ink);font-weight:800}
 .selexpr{margin:8px 0 4px;word-break:break-word}
 .selexpr .math{font-size:16px}
+.dcopt{display:flex;align-items:center;gap:7px;margin:10px 0 2px;font-size:13px;cursor:pointer}
+.dcopt input{cursor:pointer}
 #summary .btn{margin-top:8px}
 .disppick{display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:10px}
 .disppick:empty{display:none}
@@ -556,6 +558,7 @@ let lastSelSig = '', lastAnaSig = '', lastAllOk = null;
 let revealed = new Set(), revealKey = '';   // segments whose solution is shown
 let hoverComp = null, suppressCtx = false, lastAna = null;
 let dispSel = 0;                 // which display the check panel shows (0 = ones)
+let blankDC = false;             // suggested solution turns the display off for don't-care inputs
 const solCache = new Map();      // solutions only depend on the settings
 const NOSOL = new URLSearchParams(location.search).has('nosolution');   // ?nosolution hides all solutions
 
@@ -1091,7 +1094,7 @@ function render() {
   $('#emptyHint').hidden = S.comps.some(c => isGate(c.type) || isIC(c) || c.type === 'CONST') || S.wires.length > 0;
   $('#taskBtn').textContent = '📋 ' + (S.task === 'free' ? 'Tasks' : taskOf().title);
   const sig = JSON.stringify([S.wires, S.comps.map(c => [c.id, c.type, c.n, c.value, c.chip]), S.bits, S.mode, S.disp, S.inputs,
-                              S.task, S.allowed, tableView, tab, kmapSeg, [...revealed], dispSel, S.disps, S.lead]);
+                              S.task, S.allowed, tableView, tab, kmapSeg, [...revealed], dispSel, S.disps, S.lead, blankDC]);
   if (sig !== lastAnaSig) { lastAnaSig = sig; renderAnalysis(idx); }
   $('#undo').disabled = !undoStack.length;
   $('#redo').disabled = !redoStack.length;
@@ -1375,7 +1378,8 @@ function renderKmapTab(A, idx) {
         <div class="chips">${sol.terms.length
           ? sol.terms.map(t => `<span class="chip" data-cells="${termCells(t).join(',')}"><span class="math">${termHtml(t, sol.pos)}</span></span>`).join('')
           : `<span class="hint">No groups needed: the pin is always ${sol.pos ? 1 : 0}.</span>`}</div>
-        <div style="margin-top:8px">→ <span class="math"><b>${SEG[i]}</b> = ${solHtml(sol)}</span></div></div>`;
+        <div style="margin-top:8px">→ <span class="math"><b>${SEG[i]}</b> = ${solHtml(sol)}</span></div>
+        ${blankDC ? `<p class="hint">The X cells count as ${levelOf(false)} here, because "turn the display off for don't-care inputs" is ticked in the Solution tab.</p>` : ''}</div>`;
     } else {
       h += `<div class="row"><button class="btn" data-reveal="${i}">💡 Show the solution for segment ${SEG[i]}</button></div>`;
     }
@@ -1440,12 +1444,16 @@ function solutionFamily() {
 }
 // per segment of display k: minimal SOP of the pin level (or POS via the 0s for NOR-only tasks)
 function solveDisplay(A, k) {
-  const key = JSON.stringify([S.bits, S.mode, S.disp, S.lead, S.disps, S.allowed, k]);
+  const key = JSON.stringify([S.bits, S.mode, S.disp, S.lead, S.disps, S.allowed, k, blankDC]);
   if (solCache.has(key)) return solCache.get(key);
   const pos = solutionFamily() === 'nor';
+  const off = levelOf(false);     // pin level that leaves a segment dark
   const sols = SEG.split('').map((_, i) => {
     const ones = [], zeros = [], dcs = [];
-    for (const r of A.rows) { if (!r.exp) dcs.push(r.v); else (levelOf(r.exp[k][i]) ? ones : zeros).push(r.v); }
+    for (const r of A.rows) {
+      if (!r.exp) { if (blankDC) (off ? ones : zeros).push(r.v); else dcs.push(r.v); }
+      else (levelOf(r.exp[k][i]) ? ones : zeros).push(r.v);
+    }
     return {terms: minimize(S.bits, pos ? zeros : ones, dcs), pos};
   });
   solCache.set(key, sols);
@@ -1614,6 +1622,13 @@ function renderSolutionTab(A) {
       ? `<span class="math">${solHtml(sols[i])}</span><button class="btn sm" data-kmap="${i}" title="See the groups in the Karnaugh map">K-map</button>`
       : `<span class="hidden-sol">• • •</span><button class="btn sm" data-reveal="${i}">Show</button>`) + `</div>`).join('');
   h += `<div class="row"><button class="btn" data-act="revealall">Show all</button><button class="btn" data-act="hideall">Hide all</button></div>`;
+  if (A.rows.some(r => !r.exp)) {
+    h += `<label class="dcopt"><input type="checkbox" data-act="blankdc"${blankDC ? ' checked' : ''}> ` +
+      `Turn the display off for don't-care inputs</label>` +
+      `<p class="hint">${blankDC
+        ? 'The X inputs now have to blank the display, so they can no longer be used to simplify — that is why this needs more gates. A real decoder chip such as the 74HC4511 does blank them.'
+        : 'Right now the X inputs may show anything, which is what makes the answer this short. Tick the box to blank them instead, like a real decoder chip does.'}</p>`;
+  }
   h += `<div class="card"><b>Build the whole solution</b>
     <p class="hint">A generated circuit with <b>${gates.length}</b> gate${gates.length === 1 ? '' : 's'}${countTxt ? ` (${countTxt})` : ''}. It replaces your board, but you can get your work back with Undo.</p>
     <button class="btn primary" data-act="buildsol">Build the solution on the board</button></div>
@@ -2035,6 +2050,7 @@ $('#tabBody').addEventListener('click', e => {
   else if (d.cells !== undefined) highlightCells(d.cells);
   else if (d.act === 'revealall') { SEG.split('').forEach((_, i) => revealed.add(dispSel + ':' + i)); render(); }
   else if (d.act === 'hideall') { revealed.clear(); render(); }
+  else if (d.act === 'blankdc') { blankDC = !blankDC; render(); }
   else if (d.act === 'buildsol') {
     if (S.comps.some(c => !fixed(c)) && !confirm('Replace your board with the suggested solution? (You can get your work back with Undo.)')) return;
     buildSolution();
