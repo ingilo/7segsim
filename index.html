@@ -419,6 +419,8 @@ svg text{pointer-events:none;user-select:none}
     <li><b>Add:</b> drag a component from the left panel, or click it. <b>NOTE</b> adds a text note (double-click it to edit).</li>
     <li><b>IC chips:</b> below the gates you can add real 74HC chips, e.g. <b>74HC08</b> (four AND gates in one package). The pin numbers are the real ones from the datasheet, so you can wire the same circuit on a breadboard afterwards. <b>VCC</b> and <b>GND</b> are marked in red — a real chip needs them, but the simulator powers the chip for you. Select a chip to see which of its gates are still free.</li>
     <li><b>Wires:</b> under <b>Drawing</b> on the left you can switch between curved, right-angle and straight wires. Right angles look like a real schematic.</li>
+    <li><b>Turn a part:</b> select a chip, a gate or the controller and press <b>R</b> (<b>Shift+R</b> the other way), or use the ⟲ ⟳ buttons in the <b>Selected</b> panel. Handy when a chip's pins point the wrong way.</li>
+    <li><b>Solution with chips:</b> in the 💡 Solution tab you can build the suggested answer either from loose gates or from 74HC chips. The chip version tells you how many packages you would have to buy, and wires them on their real pins.</li>
     <li><b>Wire:</b> drag from a pin (small circle) to another pin, or click one pin and then the other. The pins you can connect to light up blue. One output can feed many inputs.</li>
     <li><b>Understand a gate:</b> click it to see its truth table, its current values and the formula its output computes. Hover over a part to highlight its wires.</li>
     <li><b>Move or remove a wire:</b> drag it off the input pin. Drop it on empty space to delete it.</li>
@@ -496,6 +498,50 @@ const ICS = {
   '74HC4075': {gate:'OR', desc:'Triple 3-input OR',  pins:[[3,4,5,6],[1,2,8,9],[11,12,13,10]]},
 };
 const IC_NAMES = Object.keys(ICS);
+// widest single package you can buy of each gate type (OR/NOR stop at 3 inputs)
+const IC_MAX_IN = {};
+for (const name of IC_NAMES) {
+  const g = ICS[name].gate, w = ICS[name].pins[0].length - 1;
+  if (w > (IC_MAX_IN[g] || 0)) IC_MAX_IN[g] = w;
+}
+// package for one gate: the exact input count if it exists, else a wider one (spare inputs get tied)
+function chipFor(gate, n) {
+  return IC_NAMES.filter(name => ICS[name].gate === gate && ICS[name].pins[0].length - 1 >= n)
+    .sort((a, b) => (ICS[a].pins[0].length - ICS[b].pins[0].length) || ICS[b].pins.length - ICS[a].pins.length)[0] || null;
+}
+// fit gates into packages: widest gates first, so a narrower gate can reuse a free unit
+// in a wider package (its spare inputs are simply tied to one that is used)
+function packGates(list) {
+  const byOp = new Map();
+  for (const it of list) {
+    if (!byOp.has(it.op)) byOp.set(it.op, []);
+    byOp.get(it.op).push(it);
+  }
+  const chips = [], loose = [];
+  for (const [op, items] of byOp) {
+    items.sort((a, b) => b.w - a.w || (a.g && b.g ? a.g.level - b.g.level || a.g.rank - b.g.rank || a.g.id - b.g.id : 0));
+    const open = [];
+    for (const it of items) {
+      let ch = open.find(c => ICS[c.name].pins[0].length - 1 >= it.w && c.items.length < ICS[c.name].pins.length);
+      if (!ch) {
+        const name = chipFor(op, it.w);
+        if (!name) { loose.push(it); continue; }       // too wide for any package
+        ch = {name, items: []};
+        chips.push(ch);
+        open.push(ch);
+      }
+      it.unit = ch.items.length;
+      it.chip = ch;
+      ch.items.push(it);
+    }
+  }
+  return {chips, loose};
+}
+const chipTally = chips => {
+  const t = new Map();
+  for (const name of chips) t.set(name, (t.get(name) || 0) + 1);
+  return [...t].sort().map(([n, c]) => `${c} × ${n}`).join(', ');
+};
 const IC_W = 130, IC_ROWS = 7, IC_ROW = 30, IC_H = IC_ROWS * IC_ROW;
 const LETTERS = 'ABCDEFGH';
 // colours used for the exported picture (always light, so it prints well)
@@ -599,6 +645,7 @@ function normalize(o) {
     if (c.type === 'CONST') nc.value = c.value ? 1 : 0;
     if (c.type === 'NOTE') nc.text = String(c.text == null ? '' : c.text).slice(0, 500);
     if (c.type === 'IC') nc.chip = c.chip;
+    if ([90, 180, 270].includes(+c.rot)) nc.rot = +c.rot;
     s.comps.push(nc);
   }
   if (!s.comps.some(c => c.id === 'ctrl')) s.comps.unshift({id:'ctrl', type:'CTRL', x:40, y:60});
@@ -700,13 +747,34 @@ function outPinsLocal(c, bits = S.bits) {
   if (c.type === 'CONST') return [{x: 60, y: 20}];
   return [];
 }
+// the part's own box, before it is turned (pin stubs included)
+function rawBox(c) {
+  if (isGate(c.type)) { const {h, outX} = gateGeom(c); return {x0: -20, y0: 0, x1: outX, y1: h}; }
+  if (c.type === 'CTRL') return {x0: 0, y0: 0, x1: 160, y1: 50 + S.bits * 40};
+  if (c.type === 'DISP') return {x0: -20, y0: 0, x1: 180, y1: 264};
+  if (isIC(c)) return {x0: -20, y0: 0, x1: IC_W + 20, y1: IC_H};
+  if (c.type === 'NOTE') { const g = noteGeom(c); return {x0: 0, y0: 0, x1: g.w, y1: g.h}; }
+  return {x0: 0, y0: 0, x1: 60, y1: 40};
+}
+const ROT = {0: [1, 0], 90: [0, 1], 180: [-1, 0], 270: [0, -1]};   // [cos, sin]
+const canRotate = c => isIC(c) || c.type === 'CTRL' || isGate(c.type) || c.type === 'CONST';
+function rotCenter(c) {
+  const b = rawBox(c);
+  return {x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2};
+}
+// a point of the part, turned around the part's own centre
+function rotPt(c, pt) {
+  const a = c.rot || 0;
+  if (!a) return pt;
+  const k = rotCenter(c), [co, si] = ROT[a] || ROT[0], dx = pt.x - k.x, dy = pt.y - k.y;
+  return {x: k.x + dx * co - dy * si, y: k.y + dx * si + dy * co};
+}
 function compBox(c) {
-  if (isGate(c.type)) { const {h, outX} = gateGeom(c); return {x0: c.x - 20, y0: c.y, x1: c.x + outX, y1: c.y + h}; }
-  if (c.type === 'CTRL') return {x0: c.x, y0: c.y, x1: c.x + 160, y1: c.y + 50 + S.bits * 40};
-  if (c.type === 'DISP') return {x0: c.x - 20, y0: c.y, x1: c.x + 180, y1: c.y + 264};
-  if (isIC(c)) return {x0: c.x - 20, y0: c.y, x1: c.x + IC_W + 20, y1: c.y + IC_H};
-  if (c.type === 'NOTE') { const g = noteGeom(c); return {x0: c.x, y0: c.y, x1: c.x + g.w, y1: c.y + g.h}; }
-  return {x0: c.x, y0: c.y, x1: c.x + 60, y1: c.y + 40};
+  const b = rawBox(c);
+  if (!c.rot) return {x0: c.x + b.x0, y0: c.y + b.y0, x1: c.x + b.x1, y1: c.y + b.y1};
+  const p = [[b.x0, b.y0], [b.x1, b.y0], [b.x1, b.y1], [b.x0, b.y1]].map(([x, y]) => rotPt(c, {x, y}));
+  return {x0: c.x + Math.min(...p.map(q => q.x)), y0: c.y + Math.min(...p.map(q => q.y)),
+          x1: c.x + Math.max(...p.map(q => q.x)), y1: c.y + Math.max(...p.map(q => q.y))};
 }
 function boundsOf(list) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -720,7 +788,9 @@ function pinWorld(cid, kind, p, byId) {
   const c = byId ? byId.get(cid) : comp(cid);
   if (!c) return null;
   const pt = (kind === 'in' ? inPinsLocal(c) : outPinsLocal(c))[p];
-  return pt ? {x: c.x + pt.x, y: c.y + pt.y} : null;
+  if (!pt) return null;
+  const q = rotPt(c, pt);
+  return {x: c.x + q.x, y: c.y + q.y};
 }
 function srcName(from, byId) {
   const c = byId.get(from.c);
@@ -756,24 +826,61 @@ function roundedPoly(pts, r) {
   const l = p[p.length - 1];
   return d + ` L${l.x} ${l.y}`;
 }
-function wirePath(a, b, fromComp) {
+const WIRE_M = 25;          // how far a wire steps clear of a pin before it turns
+const WIRE_HIDE = 2500;     // a detour of up to this many pixels beats disappearing behind a part
+let OBS = [], OBS_TOP = 0, OBS_BOT = 0;
+function buildObstacles() {
+  OBS = S.comps.filter(c => c.type !== 'NOTE').map(c => {
+    const b = compBox(c);
+    return {x0: b.x0 + 3, y0: b.y0 + 3, x1: b.x1 - 3, y1: b.y1 - 3};
+  });
+  OBS_TOP = snap(Math.min(...OBS.map(o => o.y0), 0) - 45);     // lanes above and below everything,
+  OBS_BOT = snap(Math.max(...OBS.map(o => o.y1), 0) + 45);     // where a wire can always get through
+}
+const segBlocked = (a, b, obs) => obs.some(o =>
+  Math.max(a.x, b.x) > o.x0 && Math.min(a.x, b.x) < o.x1 &&
+  Math.max(a.y, b.y) > o.y0 && Math.min(a.y, b.y) < o.y1);
+function routeCost(pts, obs) {
+  let cross = 0, len = 0;
+  for (let i = 1; i < pts.length; i++) {
+    len += Math.abs(pts[i].x - pts[i - 1].x) + Math.abs(pts[i].y - pts[i - 1].y);
+    if (segBlocked(pts[i - 1], pts[i], obs)) cross++;
+  }
+  return cross * WIRE_HIDE + len + pts.length * 40;
+}
+function wirePath(a, b, fromComp, toComp) {
   const style = S.wireStyle || 'ortho';
   if (style === 'straight') return `M${a.x} ${a.y} L${b.x} ${b.y}`;
-  if (style === 'ortho') {
-    if (Math.abs(a.y - b.y) < 1.5) return `M${a.x} ${a.y} L${b.x} ${b.y}`;
-    // an IC output can sit on the left side of the package, so keep the
-    // corner clear of the body: the wire then reads as passing behind it
-    const clear = fromComp && isIC(fromComp) ? compBox(fromComp).x1 + 20 : a.x + 25;
-    if (b.x - a.x >= 40) {
-      const mx = snap(Math.max((a.x + b.x) / 2, Math.min(clear, b.x - 25)));
-      return roundedPoly([a, {x: mx, y: a.y}, {x: mx, y: b.y}, b], 8);
-    }
-    // the target sits behind the source: step out, run back through the gap, step in
-    const ax = snap(clear), bx = b.x - 25, my = snap((a.y + b.y) / 2);
-    return roundedPoly([a, {x: ax, y: a.y}, {x: ax, y: my}, {x: bx, y: my}, {x: bx, y: b.y}, b], 8);
+  if (style === 'curve') {
+    const d = Math.max(30, Math.abs(b.x - a.x) * 0.5);
+    return `M${a.x} ${a.y} C${a.x + d} ${a.y} ${b.x - d} ${b.y} ${b.x} ${b.y}`;
   }
-  const d = Math.max(30, Math.abs(b.x - a.x) * 0.5);
-  return `M${a.x} ${a.y} C${a.x + d} ${a.y} ${b.x - d} ${b.y} ${b.x} ${b.y}`;
+  // right angles: a pin on the left of a chip leaves to the left, and the wire
+  // is routed round the packages instead of disappearing behind them
+  const side = (p, c, fb) => {
+    if (!c) return fb;
+    const bx = compBox(c);
+    return p.x <= (bx.x0 + bx.x1) / 2 ? -1 : 1;
+  };
+  const sa = side(a, fromComp, b.x >= a.x ? 1 : -1), sb = side(b, toComp, a.x <= b.x ? -1 : 1);
+  const ax = snap(a.x + sa * WIRE_M), bx = snap(b.x + sb * WIRE_M);
+  const near = OBS.filter(o => o.x1 > Math.min(a.x, b.x) - 70 && o.x0 < Math.max(a.x, b.x) + 70 &&
+                               o.y1 > Math.min(a.y, b.y) - 70 && o.y0 < Math.max(a.y, b.y) + 70);
+  const cands = [];
+  if (Math.abs(a.y - b.y) < 1.5 && sa > 0 && sb < 0) cands.push([a, b]);
+  const mxs = new Set([snap((ax + bx) / 2), ax, bx]);
+  for (const o of near) { mxs.add(snap(o.x0 - 14)); mxs.add(snap(o.x1 + 14)); }
+  for (const mx of mxs) cands.push([a, {x: mx, y: a.y}, {x: mx, y: b.y}, b]);
+  const mys = new Set([snap((a.y + b.y) / 2), OBS_TOP, OBS_BOT]);
+  for (const o of near) { mys.add(snap(o.y0 - 16)); mys.add(snap(o.y1 + 16)); }
+  for (const my of mys) cands.push([a, {x: ax, y: a.y}, {x: ax, y: my}, {x: bx, y: my}, {x: bx, y: b.y}, b]);
+  let best = cands[0], bestC = Infinity;
+  for (const p of cands) {
+    const cost = routeCost(p, OBS);
+    if (cost < bestC) { bestC = cost; best = p; }
+    if (bestC < WIRE_HIDE && p.length <= 4) break;   // a simple route that hides nothing: good enough
+  }
+  return roundedPoly(best, 8);
 }
 
 // ---------- simulation ----------
@@ -968,7 +1075,8 @@ function pinSvg(c, kind, i, pt, val, connected, label) {
 
 function renderComp(c, res, idx) {
   const selc = selC.has(c.id) ? ' sel' : '';
-  let s = `<g class="comp${selc}" data-comp="${c.id}" transform="translate(${c.x} ${c.y})">`;
+  const rot = c.rot || 0, rc = rotCenter(c);
+  let s = `<g class="comp${selc}" data-comp="${c.id}" transform="translate(${c.x} ${c.y})${rot ? ` rotate(${rot} ${rc.x} ${rc.y})` : ''}">`;
   const inVal = i => { const w = idx.inMap.get(c.id + ':' + i); return w ? res.out.get(w.from.c + ':' + w.from.p) : null; };
   let inLbl = i => `Input ${i + 1}`, outLbl = () => 'Output';
 
@@ -1051,7 +1159,15 @@ function renderComp(c, res, idx) {
   }
   inPinsLocal(c).forEach((pt, i) => { s += pinSvg(c, 'in', i, pt, inVal(i), idx.inMap.has(c.id + ':' + i), inLbl(i)); });
   outPinsLocal(c).forEach((pt, i) => { s += pinSvg(c, 'out', i, pt, res.out.get(c.id + ':' + i), true, outLbl(i)); });
-  return s + '</g>';
+  return uprightText(s, rot) + '</g>';
+}
+// a turned part keeps its labels the right way up
+function uprightText(svg, a) {
+  if (!a) return svg;
+  return svg.replace(/<text\b[^>]*>/g, t => {
+    const mx = /\bx="(-?[\d.]+)"/.exec(t), my = /\by="(-?[\d.]+)"/.exec(t);
+    return t.slice(0, -1) + ` transform="rotate(${-a} ${mx ? mx[1] : 0} ${my ? my[1] : 0})">`;
+  });
 }
 
 function applyView() {
@@ -1062,6 +1178,7 @@ function applyView() {
 function render() {
   const idx = buildIndex();
   const res = evaluate(S.inputs, idx);
+  buildObstacles();
   let h = '';
   // notes behind everything else
   const order = [...S.comps.filter(c => c.type === 'NOTE'), ...S.comps.filter(c => c.type !== 'NOTE')];
@@ -1069,7 +1186,7 @@ function render() {
   for (const w of S.wires) {
     const a = pinWorld(w.from.c, 'out', w.from.p, idx.byId), b = pinWorld(w.to.c, 'in', w.to.p, idx.byId);
     if (!a || !b) continue;
-    const d = wirePath(a, b, idx.byId.get(w.from.c)), v = res.out.get(w.from.c + ':' + w.from.p) ? 1 : 0;
+    const d = wirePath(a, b, idx.byId.get(w.from.c), idx.byId.get(w.to.c)), v = res.out.get(w.from.c + ':' + w.from.p) ? 1 : 0;
     h += `<g class="wg" data-a="${w.from.c}" data-b="${w.to.c}">${selW === w.id ? `<path class="wire-sel" d="${d}"/>` : ''}<path class="wire ${v ? 'on' : 'off'}" d="${d}"/>` +
          `<path class="wire-hit" data-wire="${w.id}" d="${d}"><title>${srcName(w.from, idx.byId)} → ${dstName(w.to, idx.byId)} = ${v}</title></path></g>`;
   }
@@ -1170,7 +1287,10 @@ function renderSel(res, idx) {
   if (sig === lastSelSig) return;
   lastSelSig = sig;
   const el = $('#selpanel');
-  const actions = `<div class="row"><button class="btn" data-act="dup">Duplicate</button><button class="btn danger" data-act="del">Delete</button></div>`;
+  const rotRow = ids.some(id => { const x = comp(id); return x && canRotate(x); })
+    ? `<div class="row">Turn <button class="btn sm" data-act="rotl" title="Turn left (Shift+R)">⟲</button>` +
+      `<button class="btn sm" data-act="rotr" title="Turn right (R)">⟳</button></div>` : '';
+  const actions = `${rotRow}<div class="row"><button class="btn" data-act="dup">Duplicate</button><button class="btn danger" data-act="del">Delete</button></div>`;
   if (selW) {
     const wv = selWire && res.out.get(selWire.from.c + ':' + selWire.from.p) ? 1 : 0;
     el.innerHTML = `<p><b>Wire</b></p>${selWire ? `<p style="margin:4px 0">${srcName(selWire.from, idx.byId)} → ${dstName(selWire.to, idx.byId)}<br>Value now: <b>${wv}</b></p>` : ''}
@@ -1198,7 +1318,7 @@ function renderSel(res, idx) {
     el.innerHTML = `<p><b>Note</b></p><p class="hint">Double-click the note to edit it.</p>
       <div class="row"><button class="btn" data-act="edit">Edit text</button><button class="btn danger" data-act="del">Delete</button></div>`;
   } else if (c.type === 'CTRL') {
-    el.innerHTML = `<p><b>Controller</b></p><p class="hint">Has ${S.bits} output${S.bits > 1 ? 's' : ''}. A is the most significant bit. Change the number of outputs in the top bar.</p>`;
+    el.innerHTML = `<p><b>Controller</b></p><p class="hint">Has ${S.bits} output${S.bits > 1 ? 's' : ''}. A is the most significant bit. Change the number of outputs in the top bar.</p>${rotRow}`;
   } else {
     el.innerHTML = `<p><b>7-segment display</b></p><p class="hint">One input per segment: a = top, b = top right, c = bottom right, d = bottom, e = bottom left, f = top left, g = middle.</p>`;
   }
@@ -1206,23 +1326,12 @@ function renderSel(res, idx) {
 
 // which chips you would have to buy to build the discrete gates for real
 function chipsNeeded() {
-  const want = new Map();     // "AND:2" -> how many such gates
-  for (const c of S.comps) {
-    if (!isGate(c.type)) continue;
-    const k = c.type + ':' + (c.type === 'NOT' ? 1 : c.n);
-    want.set(k, (want.get(k) || 0) + 1);
-  }
-  const chips = new Map(), missing = [];
-  for (const [k, cnt] of want) {
-    const [type, n] = k.split(':');
-    // a chip with more inputs still works: tie the spare inputs to a used one
-    const fits = IC_NAMES.filter(name => ICS[name].gate === type && ICS[name].pins[0].length - 1 >= +n)
-                         .sort((a, b) => (ICS[a].pins[0].length - ICS[b].pins[0].length) || ICS[b].pins.length - ICS[a].pins.length);
-    if (!fits.length) { missing.push(`${cnt} × ${n}-input ${type}`); continue; }
-    const name = fits[0];
-    chips.set(name, (chips.get(name) || 0) + cnt / ICS[name].pins.length);
-  }
-  return {chips: [...chips].map(([name, v]) => `${Math.ceil(v)} × ${name}`), missing};
+  const list = [];
+  for (const c of S.comps) if (isGate(c.type)) list.push({op: c.type, w: c.type === 'NOT' ? 1 : c.n});
+  const {chips, loose} = packGates(list);
+  const miss = new Map();
+  for (const it of loose) { const k = `${it.w}-input ${it.op}`; miss.set(k, (miss.get(k) || 0) + 1); }
+  return {chips: chipTally(chips.map(c => c.name)), missing: [...miss].map(([k, c]) => `${c} × ${k}`)};
 }
 function renderStats() {
   const counts = {}, chips = {};
@@ -1239,7 +1348,7 @@ function renderStats() {
   if (inChips) h += `<div class="st-row"><span class="hint">Gates on chips</span><span class="hint">${inChips}</span></div>`;
   if (Object.keys(counts).length) {
     const {chips: need, missing} = chipsNeeded();
-    h += `<p class="hint" style="margin-top:8px">To build the loose gates for real: <b>${need.join(', ') || '–'}</b>` +
+    h += `<p class="hint" style="margin-top:8px">To build the loose gates for real: <b>${need || '–'}</b>` +
          `${missing.length ? ` <span class="stbad">No common 74HC chip holds ${missing.join(' or ')} — split those into smaller gates.</span>` : ''}</p>`;
   }
   $('#stats').innerHTML = h;
@@ -1487,8 +1596,11 @@ function solHtml(sol) {
   return sol.terms.map(t => termHtml(t, sol.pos)).join(sol.pos ? '' : ' + ');
 }
 // gate network (shared terms), converted to NAND-only / NOR-only when the task demands it
-function solutionDag(sols) {
+function solutionDag(sols, forIC) {
   const table = new Map(), N = S.bits, fam = solutionFamily();
+  // how wide a gate may get: 4 inputs normally, or what one 74HC package holds when building with chips
+  const finalOp = op => fam === 'std' ? op : fam === 'nand' ? 'NAND' : 'NOR';
+  const cap = op => forIC ? (IC_MAX_IN[finalOp(op)] || 2) : 4;
   const node = (op, args = [], val = null) => {
     const key = op + ':' + val + ':' + args.map(a => a.id).join(',');
     let n = table.get(key);
@@ -1501,9 +1613,10 @@ function solutionDag(sols) {
     xs = [...new Map(xs.map(x => [x.id, x])).values()].sort((a, b) => a.id - b.id);
     if (!xs.length) return C(empty);
     if (xs.length === 1) return xs[0];
-    if (xs.length > 4) {
+    const w = cap(op);
+    if (xs.length > w) {
       const g = [];
-      for (let i = 0; i < xs.length; i += 4) g.push(group(op, xs.slice(i, i + 4), empty));
+      for (let i = 0; i < xs.length; i += w) g.push(group(op, xs.slice(i, i + w), empty));
       return group(op, g, empty);
     }
     return node(op, xs);
@@ -1551,15 +1664,28 @@ function collectGates(roots) {
   roots.forEach(visit);
   return gates;
 }
-function buildSolution() {
-  const n = S.disps;
-  const roots = solutionDag(solveAllDisplays(analyze(buildIndex())));   // root k*7+i feeds display k, pin i
-  const gates = collectGates(roots);
-  // order each column by the segment the gate feeds (top display first), to keep wires tidy
+// order each column by the segment the gate feeds (top display first), to keep wires tidy
+function rankGates(gates, roots, n) {
   gates.forEach(g => { g.rank = Infinity; });
   roots.forEach((r, j) => { if (isGateNode(r)) r.rank = Math.min(r.rank, (n - 1 - Math.floor(j / 7)) * 7 + j % 7); });
   [...gates].sort((a, b) => b.level - a.level)
     .forEach(g => g.args.forEach((a, k) => { if (isGateNode(a)) a.rank = Math.min(a.rank, g.rank + k * 0.01); }));
+}
+// pack the solution into real packages: one package kind per gate type and input count,
+// which is the same shopping list the left panel works out
+function packSolution(gates) {
+  const items = gates.map(g => ({op: g.op, w: g.op === 'NOT' ? 1 : g.args.length, g}));
+  const {chips, loose} = packGates(items);
+  const slot = new Map();
+  for (const it of items) if (it.chip) slot.set(it.g.id, {ch: it.chip, unit: it.unit});
+  chips.forEach(ch => { ch.gates = ch.items.map(it => it.g); });
+  return {chips, loose: loose.map(it => it.g), slot};
+}
+function buildSolution() {
+  const n = S.disps;
+  const roots = solutionDag(solveAllDisplays(analyze(buildIndex())));   // root k*7+i feeds display k, pin i
+  const gates = collectGates(roots);
+  rankGates(gates, roots, n);
   const maxL = Math.max(0, ...gates.map(g => g.level));
   const cols = Array.from({length: maxL + 1}, () => []);
   gates.forEach(g => cols[g.level].push(g));
@@ -1607,6 +1733,78 @@ function buildSolution() {
   clearSel(); commit(); fit();
   toast(`Built a solution with ${gates.length} gate${gates.length === 1 ? '' : 's'}. Can you beat it?`);
 }
+// the same solution, but wired as real 74HC packages with datasheet pin numbers
+function buildSolutionIC() {
+  const n = S.disps;
+  const roots = solutionDag(solveAllDisplays(analyze(buildIndex())), true);
+  const gates = collectGates(roots);
+  rankGates(gates, roots, n);
+  const {chips, loose, slot} = packSolution(gates);
+  // a package sits in the column of its earliest gate
+  const parts = chips.map(ch => ({ch, h: IC_H, level: Math.min(...ch.gates.map(g => g.level)), rank: Math.min(...ch.gates.map(g => g.rank))}))
+    .concat(loose.map(g => ({g, h: Math.max(40, g.args.length * 20), level: g.level, rank: g.rank})));
+  const maxL = Math.max(1, ...parts.map(p => p.level));
+  const cols = Array.from({length: maxL + 1}, () => []);
+  parts.forEach(p => cols[p.level].push(p));
+  // every part gets a whole row of the same height, so the gaps between the chips
+  // line up across all the columns and wires have a clear lane to run in
+  const ROW = IC_H + 70, rows = Math.max(1, ...cols.map(c => c.length));
+  const ctrlH = 50 + S.bits * 40, stackH = n * 264 + (n - 1) * 40;
+  const maxH = Math.max(ctrlH, stackH, rows * ROW - 70);
+  const X0 = 280, DX = 270, TOP = 40;
+  const comps = [];
+  cols.forEach((col, L) => {
+    col.sort((a, b) => a.rank - b.rank);
+    const first = Math.floor((rows - col.length) / 2);
+    col.forEach((p, i) => {
+      const x = X0 + (L - 1) * DX, y = snap(TOP + (first + i) * ROW + (IC_H - p.h) / 2);
+      if (p.ch) {
+        const c = {id: uid(), type: 'IC', chip: p.ch.name, x, y};
+        p.ch.cid = c.id;
+        comps.push(c);
+      } else {
+        const c = {id: uid(), type: p.g.op, x, y};
+        if (p.g.op !== 'NOT') c.n = p.g.args.length;
+        p.g.cid = c.id;
+        comps.push(c);
+      }
+    });
+  });
+  const dispX = X0 + (maxL - 1) * DX + IC_W + 140, dispY = TOP + snap((maxH - stackH) / 2);
+  const constIds = {}, wires = [];
+  const srcOf = g => {
+    if (g.op === 'var') return {c: 'ctrl', p: g.val};
+    if (g.op === 'const') {
+      if (!constIds[g.val]) {
+        const c = {id: uid(), type: 'CONST', value: g.val, x: dispX - 130, y: TOP + maxH + 30 + Object.keys(constIds).length * 50};
+        comps.push(c);
+        constIds[g.val] = c.id;
+      }
+      return {c: constIds[g.val], p: 0};
+    }
+    const sl = slot.get(g.id);
+    return sl ? {c: sl.ch.cid, p: sl.unit} : {c: g.cid, p: 0};
+  };
+  for (const g of gates) {
+    const sl = slot.get(g.id);
+    if (!sl) { g.args.forEach((a, k) => wires.push({id: uid(), from: srcOf(a), to: {c: g.cid, p: k}})); continue; }
+    const w = icNIns({chip: sl.ch.name});
+    // if the package is wider than the gate needs, the spare inputs are tied to the first one, as on a breadboard
+    for (let k = 0; k < w; k++)
+      wires.push({id: uid(), from: srcOf(g.args[Math.min(k, g.args.length - 1)]), to: {c: sl.ch.cid, p: sl.unit * w + k}});
+  }
+  roots.forEach((r, j) => wires.push({id: uid(), from: srcOf(r), to: {c: dispId(Math.floor(j / 7)), p: j % 7}}));
+  stopPlay();
+  pushUndo();
+  const ctrl = comp('ctrl'), disps = S.comps.filter(c => c.type === 'DISP');
+  ctrl.x = 40; ctrl.y = TOP + snap((maxH - ctrlH) / 2);
+  disps.forEach(d => { d.x = dispX; d.y = dispY + (n - 1 - dispIndex(d.id)) * 304; });   // highest digit on top
+  S.comps = [ctrl, ...disps, ...comps];
+  S.wires = wires;
+  lastAllOk = null;
+  clearSel(); commit(); fit();
+  toast(`Built from ${chipTally(chips.map(c => c.name))}${loose.length ? ` + ${loose.length} loose gate${loose.length === 1 ? '' : 's'}` : ''}. Select a chip to see its gates.`);
+}
 function renderSolutionTab(A) {
   const sols = solveDisplay(A, dispSel), fam = solutionFamily();
   const gates = collectGates(solutionDag(solveAllDisplays(A)));
@@ -1629,9 +1827,14 @@ function renderSolutionTab(A) {
         ? 'The X inputs now have to blank the display, so they can no longer be used to simplify — that is why this needs more gates. A real decoder chip such as the 74HC4511 does blank them.'
         : 'Right now the X inputs may show anything, which is what makes the answer this short. Tick the box to blank them instead, like a real decoder chip does.'}</p>`;
   }
+  const icRoots = solutionDag(solveAllDisplays(A), true), icGates = collectGates(icRoots);
+  rankGates(icGates, icRoots, S.disps);
+  const pack = packSolution(icGates), wide = fam === 'nor' ? '74HC27 (3-input NOR)' : '74HC4075 (3-input OR)';
   h += `<div class="card"><b>Build the whole solution</b>
     <p class="hint">A generated circuit with <b>${gates.length}</b> gate${gates.length === 1 ? '' : 's'}${countTxt ? ` (${countTxt})` : ''}. It replaces your board, but you can get your work back with Undo.</p>
-    <button class="btn primary" data-act="buildsol">Build the solution on the board</button></div>
+    <div class="row"><button class="btn primary" data-act="buildsol">Loose gates</button>
+      <button class="btn primary" data-act="buildsolic">74HC chips</button></div>
+    <p class="hint">The chip version is the same answer in <b>${pack.chips.length}</b> package${pack.chips.length === 1 ? '' : 's'}: ${chipTally(pack.chips.map(c => c.name)) || '–'}${pack.loose.length ? `, plus ${pack.loose.length} gate${pack.loose.length === 1 ? '' : 's'} no 74HC package can hold` : ''}. Pin numbers are the datasheet ones, so you can rebuild it on a breadboard.${icGates.length !== gates.length ? ` It uses ${icGates.length} gates rather than ${gates.length}, because the widest one you can buy is the ${wide} — wider gates get split in two.` : ''}</p></div>
     <p class="hint">Each segment uses a minimal ${fam === 'nor' ? 'product of sums' : 'sum of products'}, and terms are shared between segments. A clever circuit can sometimes use even fewer gates. Can you beat it?</p>`;
   return h;
 }
@@ -1657,7 +1860,8 @@ function toWorld(e) {
 function nearestPin(kind, x, y) {
   let best = null, bd = Math.pow(Math.max(14, 14 / view.k), 2);
   for (const c of S.comps) {
-    (kind === 'in' ? inPinsLocal(c) : outPinsLocal(c)).forEach((pt, i) => {
+    (kind === 'in' ? inPinsLocal(c) : outPinsLocal(c)).forEach((pt0, i) => {
+      const pt = rotPt(c, pt0);
       const d = (c.x + pt.x - x) ** 2 + (c.y + pt.y - y) ** 2;
       if (d < bd) { bd = d; best = c.id + '|' + kind + '|' + i; }
     });
@@ -1674,6 +1878,14 @@ function addComp(type, x, y) {
   if (type === 'NOTE') c.text = 'Double-click to write a note';
   S.comps.push(c);
   selectOnly(c.id);
+  commit();
+}
+// turn the selected parts in 90° steps, each around its own centre
+function rotateSelected(step) {
+  const list = [...selC].map(comp).filter(c => c && canRotate(c));
+  if (!list.length) return;
+  pushUndo();
+  for (const c of list) c.rot = (((c.rot || 0) + step) % 360 + 360) % 360;
   commit();
 }
 function deleteSelected() {
@@ -2033,6 +2245,8 @@ $('#selpanel').addEventListener('click', e => {
     case 'edit': if (c) editNote(c); break;
     case 'nplus': if (c) setGateInputs(c, c.n + 1); break;
     case 'nminus': if (c) setGateInputs(c, c.n - 1); break;
+    case 'rotl': rotateSelected(-90); break;
+    case 'rotr': rotateSelected(90); break;
   }
 });
 $('#selpanel').addEventListener('change', e => {
@@ -2051,9 +2265,9 @@ $('#tabBody').addEventListener('click', e => {
   else if (d.act === 'revealall') { SEG.split('').forEach((_, i) => revealed.add(dispSel + ':' + i)); render(); }
   else if (d.act === 'hideall') { revealed.clear(); render(); }
   else if (d.act === 'blankdc') { blankDC = !blankDC; render(); }
-  else if (d.act === 'buildsol') {
+  else if (d.act === 'buildsol' || d.act === 'buildsolic') {
     if (S.comps.some(c => !fixed(c)) && !confirm('Replace your board with the suggested solution? (You can get your work back with Undo.)')) return;
-    buildSolution();
+    if (d.act === 'buildsolic') buildSolutionIC(); else buildSolution();
   }
   else if (d.v !== undefined) { stopPlay(); setValue(+d.v); }
 });
@@ -2233,6 +2447,7 @@ document.addEventListener('keydown', e => {
   else if (ctrl && k === 'c') { if (copySel()) toast('Copied — press Ctrl+V to paste'); }
   else if (ctrl && k === 'v') { e.preventDefault(); paste(); }
   else if (ctrl && k === 'a') { e.preventDefault(); selC = new Set(S.comps.map(c => c.id)); selW = null; render(); }
+  else if (!ctrl && !e.altKey && k === 'r' && selC.size) { e.preventDefault(); rotateSelected(e.shiftKey ? -90 : 90); }
   else if (!ctrl && !e.altKey && e.key.length === 1 && LETTERS.slice(0, S.bits).includes(e.key.toUpperCase())) {
     stopPlay();
     S.inputs[LETTERS.indexOf(e.key.toUpperCase())] ^= 1;

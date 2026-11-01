@@ -33,6 +33,9 @@ code-signed, so Windows SmartScreen may show "Windows protected your PC" the fir
   against the Texas Instruments datasheet for that part, so a circuit built here can be rebuilt on a breadboard.
   The sidebar also works out which chips you would have to buy for the loose gates on your board.
 - **Wire styles**: right angles (the default, like a schematic), straight lines or curves, under *Drawing* in the left panel.
+  Right-angle wires are routed *around* the parts, so no wire disappears behind a chip.
+- **Turn a part**: select a chip, a gate or the controller and press **R** (**Shift+R** the other way), or use the arrows in
+  the *Selected* panel. The labels stay the right way up.
 - **Realistic LED display** with inputs a–g, as a common cathode or common anode display.
 - **Tasks**: a warm-up, 0–3, 0–7, a BCD decoder, a hex decoder, common anode, and NAND-only / NOR-only challenges.
 - **Check panel**:
@@ -41,8 +44,10 @@ code-signed, so Windows SmartScreen may show "Windows protected your PC" the fir
   - Expressions: the Boolean formula your wiring actually computes, with overbars for NOT.
   - 💡 Solution: minimal expressions per segment (Quine–McCluskey, using don't-cares), revealed one segment at a
     time. The Karnaugh map highlights the group each term covers, and one button builds the whole circuit on the
-    board. A checkbox makes the don't-care inputs blank the display, the way a real decoder chip such as
-    the 74HC4511 does; it costs extra gates, which shows what don't-cares are worth. NAND-only / NOR-only tasks get NAND–NAND / NOR–NOR circuits.
+    board — either from **loose gates** or from **74HC chips**, wired on their real pin numbers, with the list of
+    packages you would have to buy. A checkbox makes the don't-care inputs blank the display, the way a real decoder chip
+    such as the 74HC4511 does; it costs extra gates, which shows what don't-cares are worth.
+    NAND-only / NOR-only tasks get NAND–NAND / NOR–NOR circuits.
   - Add `?nosolution` to the link (e.g. `https://…netlify.app/?nosolution`) to hide all solutions, e.g. for tests.
 - **Learning aids**:
   - Click a gate to see its truth table (with the current row marked), its live values and the formula its output computes.
