@@ -32,7 +32,7 @@ code-signed, so Windows SmartScreen may show "Windows protected your PC" the fir
   actual datasheet pin numbers, VCC/GND/NC marked, and several gates per package. Every pinout was checked
   against the Texas Instruments datasheet for that part, so a circuit built here can be rebuilt on a breadboard.
   The sidebar also works out which chips you would have to buy for the loose gates on your board.
-- **Wire styles**: curved, right angles (like a schematic) or straight lines, under *Drawing* in the left panel.
+- **Wire styles**: right angles (the default, like a schematic), straight lines or curves, under *Drawing* in the left panel.
 - **Realistic LED display** with inputs a–g, as a common cathode or common anode display.
 - **Tasks**: a warm-up, 0–3, 0–7, a BCD decoder, a hex decoder, common anode, and NAND-only / NOR-only challenges.
 - **Check panel**:

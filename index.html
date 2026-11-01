@@ -342,9 +342,9 @@ svg text{pointer-events:none;user-select:none}
     <h3>Drawing</h3>
     <label class="row">Wires
       <select id="wireStyle" title="How wires are drawn">
-        <option value="curve">Curved</option>
         <option value="ortho">Right angles</option>
         <option value="straight">Straight</option>
+        <option value="curve">Curved</option>
       </select>
     </label>
     <h3>Selected</h3>
@@ -562,7 +562,7 @@ const NOSOL = new URLSearchParams(location.search).has('nosolution');   // ?noso
 const svg = $('#svg'), world = $('#world'), viewport = $('#viewport');
 
 function defaultState() {
-  return {bits: 4, mode: 'hex', disp: 'cc', disps: 1, lead: 'blank', wireStyle: 'curve',
+  return {bits: 4, mode: 'hex', disp: 'cc', disps: 1, lead: 'blank', wireStyle: 'ortho',
     task: 'free', allowed: null, inputs: [0,0,0,0],
     comps: [{id:'ctrl', type:'CTRL', x:40, y:60}, {id:'disp', type:'DISP', x:760, y:60}],
     wires: []};
@@ -576,7 +576,7 @@ function normalize(o) {
   const s = {bits, mode: ['hex','dec','decblank'].includes(o.mode) ? o.mode : 'hex',
     disp: o.disp === 'ca' ? 'ca' : 'cc',
     disps, lead: o.lead === 'zero' ? 'zero' : 'blank',
-    wireStyle: ['curve','ortho','straight'].includes(o.wireStyle) ? o.wireStyle : 'curve',
+    wireStyle: ['curve','ortho','straight'].includes(o.wireStyle) ? o.wireStyle : 'ortho',
     task: TASKS.some(t => t.id === o.task) ? o.task : 'free',
     allowed: allowed.length ? allowed : null,
     inputs: [], comps: [], wires: []};
@@ -754,7 +754,7 @@ function roundedPoly(pts, r) {
   return d + ` L${l.x} ${l.y}`;
 }
 function wirePath(a, b, fromComp) {
-  const style = S.wireStyle || 'curve';
+  const style = S.wireStyle || 'ortho';
   if (style === 'straight') return `M${a.x} ${a.y} L${b.x} ${b.y}`;
   if (style === 'ortho') {
     if (Math.abs(a.y - b.y) < 1.5) return `M${a.x} ${a.y} L${b.x} ${b.y}`;
@@ -2068,7 +2068,7 @@ $('#taskCard').addEventListener('click', e => {
 });
 
 function syncControls() {
-  $('#wireStyle').value = S.wireStyle || 'curve';
+  $('#wireStyle').value = S.wireStyle || 'ortho';
   $('#bits').value = S.bits;
   $('#disps').value = S.disps;
   $('#lead').value = S.lead;
