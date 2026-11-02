@@ -420,7 +420,7 @@ svg text{pointer-events:none;user-select:none}
     <li><b>IC chips:</b> below the gates you can add real 74HC chips, e.g. <b>74HC08</b> (four AND gates in one package). The pin numbers are the real ones from the datasheet, so you can wire the same circuit on a breadboard afterwards. <b>VCC</b> and <b>GND</b> are marked in red — a real chip needs them, but the simulator powers the chip for you. Select a chip to see which of its gates are still free.</li>
     <li><b>Wires:</b> under <b>Drawing</b> on the left you can switch between curved, right-angle and straight wires. Right angles look like a real schematic.</li>
     <li><b>Turn a part:</b> select a chip, a gate or the controller and press <b>R</b> (<b>Shift+R</b> the other way), or use the ⟲ ⟳ buttons in the <b>Selected</b> panel. Handy when a chip's pins point the wrong way.</li>
-    <li><b>Solution with chips:</b> in the 💡 Solution tab you can build the suggested answer either from loose gates or from 74HC chips. The chip version tells you how many packages you would have to buy, and wires them on their real pins.</li>
+    <li><b>Solution with chips:</b> in the 💡 Solution tab you can build the suggested answer either from loose gates or from 74HC chips. The chip version tells you how many packages you would have to buy, and wires them on their real pins. A third button builds it from nothing but the 74HC04, 74HC08 and 74HC32.</li>
     <li><b>Wire:</b> drag from a pin (small circle) to another pin, or click one pin and then the other. The pins you can connect to light up blue. One output can feed many inputs.</li>
     <li><b>Understand a gate:</b> click it to see its truth table, its current values and the formula its output computes. Hover over a part to highlight its wires.</li>
     <li><b>Move or remove a wire:</b> drag it off the input pin. Drop it on empty space to delete it.</li>
@@ -498,20 +498,27 @@ const ICS = {
   '74HC4075': {gate:'OR', desc:'Triple 3-input OR',  pins:[[3,4,5,6],[1,2,8,9],[11,12,13,10]]},
 };
 const IC_NAMES = Object.keys(ICS);
+// the three chips of the classic starter kit: NOT, 2-input AND, 2-input OR
+const IC_KIT = ['74HC04', '74HC08', '74HC32'];
 // widest single package you can buy of each gate type (OR/NOR stop at 3 inputs)
-const IC_MAX_IN = {};
-for (const name of IC_NAMES) {
-  const g = ICS[name].gate, w = ICS[name].pins[0].length - 1;
-  if (w > (IC_MAX_IN[g] || 0)) IC_MAX_IN[g] = w;
-}
-// package for one gate: the exact input count if it exists, else a wider one (spare inputs get tied)
-function chipFor(gate, n) {
-  return IC_NAMES.filter(name => ICS[name].gate === gate && ICS[name].pins[0].length - 1 >= n)
+const maxIns = names => {
+  const m = {};
+  for (const name of names) {
+    const g = ICS[name].gate, w = ICS[name].pins[0].length - 1;
+    if (w > (m[g] || 0)) m[g] = w;
+  }
+  return m;
+};
+const IC_MAX_IN = maxIns(IC_NAMES);
+// package for one gate: the exact input count if it exists, else a wider one (spare inputs get tied).
+// kit limits the choice to those packages; left out, anything you can buy is fair game
+function chipFor(gate, n, kit) {
+  return (kit || IC_NAMES).filter(name => ICS[name].gate === gate && ICS[name].pins[0].length - 1 >= n)
     .sort((a, b) => (ICS[a].pins[0].length - ICS[b].pins[0].length) || ICS[b].pins.length - ICS[a].pins.length)[0] || null;
 }
 // fit gates into packages: widest gates first, so a narrower gate can reuse a free unit
 // in a wider package (its spare inputs are simply tied to one that is used)
-function packGates(list) {
+function packGates(list, kit) {
   const byOp = new Map();
   for (const it of list) {
     if (!byOp.has(it.op)) byOp.set(it.op, []);
@@ -524,7 +531,7 @@ function packGates(list) {
     for (const it of items) {
       let ch = open.find(c => ICS[c.name].pins[0].length - 1 >= it.w && c.items.length < ICS[c.name].pins.length);
       if (!ch) {
-        const name = chipFor(op, it.w);
+        const name = chipFor(op, it.w, kit);
         if (!name) { loose.push(it); continue; }       // too wide for any package
         ch = {name, items: []};
         chips.push(ch);
@@ -1596,11 +1603,12 @@ function solHtml(sol) {
   return sol.terms.map(t => termHtml(t, sol.pos)).join(sol.pos ? '' : ' + ');
 }
 // gate network (shared terms), converted to NAND-only / NOR-only when the task demands it
-function solutionDag(sols, forIC) {
+function solutionDag(sols, forIC, kit) {
   const table = new Map(), N = S.bits, fam = solutionFamily();
-  // how wide a gate may get: 4 inputs normally, or what one 74HC package holds when building with chips
+  // how wide a gate may get: 4 inputs normally, or what one package of the kit holds when building with chips
   const finalOp = op => fam === 'std' ? op : fam === 'nand' ? 'NAND' : 'NOR';
-  const cap = op => forIC ? (IC_MAX_IN[finalOp(op)] || 2) : 4;
+  const lim = kit ? maxIns(kit) : IC_MAX_IN;
+  const cap = op => forIC ? (lim[finalOp(op)] || 2) : 4;
   const node = (op, args = [], val = null) => {
     const key = op + ':' + val + ':' + args.map(a => a.id).join(',');
     let n = table.get(key);
@@ -1673,9 +1681,9 @@ function rankGates(gates, roots, n) {
 }
 // pack the solution into real packages: one package kind per gate type and input count,
 // which is the same shopping list the left panel works out
-function packSolution(gates) {
+function packSolution(gates, kit) {
   const items = gates.map(g => ({op: g.op, w: g.op === 'NOT' ? 1 : g.args.length, g}));
-  const {chips, loose} = packGates(items);
+  const {chips, loose} = packGates(items, kit);
   const slot = new Map();
   for (const it of items) if (it.chip) slot.set(it.g.id, {ch: it.chip, unit: it.unit});
   chips.forEach(ch => { ch.gates = ch.items.map(it => it.g); });
@@ -1734,12 +1742,12 @@ function buildSolution() {
   toast(`Built a solution with ${gates.length} gate${gates.length === 1 ? '' : 's'}. Can you beat it?`);
 }
 // the same solution, but wired as real 74HC packages with datasheet pin numbers
-function buildSolutionIC() {
+function buildSolutionIC(kit) {
   const n = S.disps;
-  const roots = solutionDag(solveAllDisplays(analyze(buildIndex())), true);
+  const roots = solutionDag(solveAllDisplays(analyze(buildIndex())), true, kit);
   const gates = collectGates(roots);
   rankGates(gates, roots, n);
-  const {chips, loose, slot} = packSolution(gates);
+  const {chips, loose, slot} = packSolution(gates, kit);
   // a package sits in the column of its earliest gate
   const parts = chips.map(ch => ({ch, h: IC_H, level: Math.min(...ch.gates.map(g => g.level)), rank: Math.min(...ch.gates.map(g => g.rank))}))
     .concat(loose.map(g => ({g, h: Math.max(40, g.args.length * 20), level: g.level, rank: g.rank})));
@@ -1830,11 +1838,20 @@ function renderSolutionTab(A) {
   const icRoots = solutionDag(solveAllDisplays(A), true), icGates = collectGates(icRoots);
   rankGates(icGates, icRoots, S.disps);
   const pack = packSolution(icGates), wide = fam === 'nor' ? '74HC27 (3-input NOR)' : '74HC4075 (3-input OR)';
+  // the same answer once more, but out of the three starter-kit chips alone
+  let kitBtn = '', kitTxt = '';
+  if (fam === 'std') {
+    const kRoots = solutionDag(solveAllDisplays(A), true, IC_KIT), kGates = collectGates(kRoots);
+    rankGates(kGates, kRoots, S.disps);
+    const kPack = packSolution(kGates, IC_KIT);
+    kitBtn = `<button class="btn primary" data-act="buildsolkit">Only 04 + 08 + 32</button>`;
+    kitTxt = `<p class="hint">Only have the three classic chips? <b>74HC04</b> (NOT), <b>74HC08</b> (2-input AND) and <b>74HC32</b> (2-input OR) are enough for any circuit on their own. The third button builds the same answer from those: <b>${kPack.chips.length}</b> package${kPack.chips.length === 1 ? '' : 's'} (${chipTally(kPack.chips.map(c => c.name)) || '–'}) and ${kGates.length} gates, because every wider AND and OR has to be split into 2-input ones.</p>`;
+  }
   h += `<div class="card"><b>Build the whole solution</b>
     <p class="hint">A generated circuit with <b>${gates.length}</b> gate${gates.length === 1 ? '' : 's'}${countTxt ? ` (${countTxt})` : ''}. It replaces your board, but you can get your work back with Undo.</p>
     <div class="row"><button class="btn primary" data-act="buildsol">Loose gates</button>
-      <button class="btn primary" data-act="buildsolic">74HC chips</button></div>
-    <p class="hint">The chip version is the same answer in <b>${pack.chips.length}</b> package${pack.chips.length === 1 ? '' : 's'}: ${chipTally(pack.chips.map(c => c.name)) || '–'}${pack.loose.length ? `, plus ${pack.loose.length} gate${pack.loose.length === 1 ? '' : 's'} no 74HC package can hold` : ''}. Pin numbers are the datasheet ones, so you can rebuild it on a breadboard.${icGates.length !== gates.length ? ` It uses ${icGates.length} gates rather than ${gates.length}, because the widest one you can buy is the ${wide} — wider gates get split in two.` : ''}</p></div>
+      <button class="btn primary" data-act="buildsolic">74HC chips</button>${kitBtn}</div>
+    <p class="hint">The chip version is the same answer in <b>${pack.chips.length}</b> package${pack.chips.length === 1 ? '' : 's'}: ${chipTally(pack.chips.map(c => c.name)) || '–'}${pack.loose.length ? `, plus ${pack.loose.length} gate${pack.loose.length === 1 ? '' : 's'} no 74HC package can hold` : ''}. Pin numbers are the datasheet ones, so you can rebuild it on a breadboard.${icGates.length !== gates.length ? ` It uses ${icGates.length} gates rather than ${gates.length}, because the widest one you can buy is the ${wide} — wider gates get split in two.` : ''}</p>${kitTxt}</div>
     <p class="hint">Each segment uses a minimal ${fam === 'nor' ? 'product of sums' : 'sum of products'}, and terms are shared between segments. A clever circuit can sometimes use even fewer gates. Can you beat it?</p>`;
   return h;
 }
@@ -2265,9 +2282,11 @@ $('#tabBody').addEventListener('click', e => {
   else if (d.act === 'revealall') { SEG.split('').forEach((_, i) => revealed.add(dispSel + ':' + i)); render(); }
   else if (d.act === 'hideall') { revealed.clear(); render(); }
   else if (d.act === 'blankdc') { blankDC = !blankDC; render(); }
-  else if (d.act === 'buildsol' || d.act === 'buildsolic') {
+  else if (d.act === 'buildsol' || d.act === 'buildsolic' || d.act === 'buildsolkit') {
     if (S.comps.some(c => !fixed(c)) && !confirm('Replace your board with the suggested solution? (You can get your work back with Undo.)')) return;
-    if (d.act === 'buildsolic') buildSolutionIC(); else buildSolution();
+    if (d.act === 'buildsolkit') buildSolutionIC(IC_KIT);
+    else if (d.act === 'buildsolic') buildSolutionIC();
+    else buildSolution();
   }
   else if (d.v !== undefined) { stopPlay(); setValue(+d.v); }
 });

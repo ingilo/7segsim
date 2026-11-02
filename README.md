@@ -44,8 +44,8 @@ code-signed, so Windows SmartScreen may show "Windows protected your PC" the fir
   - Expressions: the Boolean formula your wiring actually computes, with overbars for NOT.
   - 💡 Solution: minimal expressions per segment (Quine–McCluskey, using don't-cares), revealed one segment at a
     time. The Karnaugh map highlights the group each term covers, and one button builds the whole circuit on the
-    board — either from **loose gates** or from **74HC chips**, wired on their real pin numbers, with the list of
-    packages you would have to buy. A checkbox makes the don't-care inputs blank the display, the way a real decoder chip
+    board — either from **loose gates**, from **74HC chips**, or from nothing but the three classic chips
+    **74HC04 + 74HC08 + 74HC32**, wired on their real pin numbers, with the list of packages you would have to buy. A checkbox makes the don't-care inputs blank the display, the way a real decoder chip
     such as the 74HC4511 does; it costs extra gates, which shows what don't-cares are worth.
     NAND-only / NOR-only tasks get NAND–NAND / NOR–NOR circuits.
   - Add `?nosolution` to the link (e.g. `https://…netlify.app/?nosolution`) to hide all solutions, e.g. for tests.
