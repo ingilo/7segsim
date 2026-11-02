@@ -462,6 +462,8 @@ const GATE_INFO = {
   XNOR:'Output is 1 when an <b>even</b> number of inputs are 1.',
   NOT:'Output is the opposite of the input.'
 };
+// the three chips of the classic starter kit: NOT, 2-input AND, 2-input OR
+const IC_KIT = ['74HC04', '74HC08', '74HC32'];
 const TASKS = [
   {id:'free', title:'Free build', desc:'No fixed goal. Choose any settings you like in the top bar.', set:null},
   {id:'t1', title:'1 · Warm-up: 1 bit', desc:'Show 0 when A = 0 and 1 when A = 1. Some segments are always on, some only need A or NOT A.', set:{bits:1, mode:'hex', disp:'cc'}},
@@ -475,6 +477,7 @@ const TASKS = [
   {id:'t9', title:'9 · Two displays: 0–15', desc:'Show 0–15 in decimal on two displays. The tens display only has to show 1, or stay blank for 0–9.', set:{bits:4, mode:'dec', disp:'cc', disps:2, lead:'blank'}},
   {id:'t10', title:'10 · Two hex digits: 00–FF', desc:'8 bits shown as two hex digits. Each display only needs 4 of the bits, so you can build the hex decoder twice!', set:{bits:8, mode:'hex', disp:'cc', disps:2, lead:'zero'}},
   {id:'t11', title:'11 · Decimal 0–31', desc:'5 bits shown as a decimal number on two displays. Converting binary to decimal is the hardest challenge!', set:{bits:5, mode:'dec', disp:'cc', disps:2, lead:'blank'}},
+  {id:'t12', title:'12 · Three chips only: 0–9', desc:'The BCD decoder again, but out of the three chips every lab drawer has: 74HC04, 74HC08 and 74HC32. That means NOT and 2-input AND/OR only, so wide terms have to be built up two inputs at a time.', set:{bits:4, mode:'dec', disp:'cc', kit:IC_KIT}},
 ];
 function modeLabel(mode, n = 1) {
   const dmax = 10 ** n - 1;
@@ -498,8 +501,6 @@ const ICS = {
   '74HC4075': {gate:'OR', desc:'Triple 3-input OR',  pins:[[3,4,5,6],[1,2,8,9],[11,12,13,10]]},
 };
 const IC_NAMES = Object.keys(ICS);
-// the three chips of the classic starter kit: NOT, 2-input AND, 2-input OR
-const IC_KIT = ['74HC04', '74HC08', '74HC32'];
 // widest single package you can buy of each gate type (OR/NOR stop at 3 inputs)
 const maxIns = names => {
   const m = {};
@@ -619,7 +620,7 @@ const svg = $('#svg'), world = $('#world'), viewport = $('#viewport');
 
 function defaultState() {
   return {bits: 4, mode: 'hex', disp: 'cc', disps: 1, lead: 'blank', wireStyle: 'ortho',
-    task: 'free', allowed: null, inputs: [0,0,0,0],
+    task: 'free', allowed: null, kit: null, inputs: [0,0,0,0],
     comps: [{id:'ctrl', type:'CTRL', x:40, y:60}, {id:'disp', type:'DISP', x:760, y:60}],
     wires: []};
 }
@@ -629,12 +630,14 @@ function normalize(o) {
   const bits = clamp(parseInt(o.bits) || 4, 1, 8);
   const disps = clamp(parseInt(o.disps) || 1, 1, 4);
   const allowed = Array.isArray(o.allowed) ? o.allowed.filter(isGate) : [];
+  const kit = Array.isArray(o.kit) ? o.kit.filter(n => ICS[n]) : [];
   const s = {bits, mode: ['hex','dec','decblank'].includes(o.mode) ? o.mode : 'hex',
     disp: o.disp === 'ca' ? 'ca' : 'cc',
     disps, lead: o.lead === 'zero' ? 'zero' : 'blank',
     wireStyle: ['curve','ortho','straight'].includes(o.wireStyle) ? o.wireStyle : 'ortho',
     task: TASKS.some(t => t.id === o.task) ? o.task : 'free',
     allowed: allowed.length ? allowed : null,
+    kit: kit.length ? kit : null,
     inputs: [], comps: [], wires: []};
   const idOk = id => typeof id === 'string' && /^[\w-]{1,40}$/.test(id);
   for (const c of o.comps) {
@@ -699,7 +702,16 @@ const comp = id => S.comps.find(c => c.id === id);
 const curValue = () => S.inputs.reduce((a, b) => a * 2 + b, 0);
 const toInputs = v => Array.from({length: S.bits}, (_, i) => (v >> (S.bits - 1 - i)) & 1);
 const taskOf = () => TASKS.find(t => t.id === S.task) || TASKS[0];
+const kitGates = kit => [...new Set(kit.map(n => ICS[n].gate))];
+// in a kit task a gate can only be as wide as the widest package of that kind in the kit
+function gateCap(type) {
+  if (!S.kit || type === 'NOT') return 4;
+  return clamp(maxIns(S.kit)[type] || 2, 2, 4);
+}
+const limitMsg = () => S.kit ? `Only the ${S.kit.join(', ')} are allowed in this task`
+                             : `Only ${S.allowed.join(', ')} gates are allowed in this task`;
 function allowedType(t) {
+  if (ICS[t] && S.kit && !S.kit.includes(t)) return false;
   if (!S.allowed) return true;
   if (ICS[t]) return S.allowed.includes(ICS[t].gate);
   return !isGate(t) || S.allowed.includes(t);
@@ -979,6 +991,12 @@ function analyze(idx) {
   const segGood = Array.from({length: S.disps}, (_, k) =>
     SEG.split('').map((_, i) => rows.every(r => !r.exp || r.exp[k][i] === r.lit[k][i])));
   const disallowed = S.allowed ? [...new Set(S.comps.filter(c => isGate(c.type) && !S.allowed.includes(c.type)).map(c => c.type))] : [];
+  // a kit task also limits how wide a gate may be, and which packages you may use
+  if (S.kit) for (const c of S.comps) {
+    const bad = c.type === 'IC' ? (S.kit.includes(c.chip) ? null : c.chip)
+      : isGate(c.type) && c.type !== 'NOT' && c.n > gateCap(c.type) ? `${c.n}-input ${c.type}` : null;
+    if (bad && !disallowed.includes(bad)) disallowed.push(bad);
+  }
   return {rows, ok, cnt, unstable, segGood, disallowed};
 }
 // Boolean expression that the wiring computes for each display pin
@@ -1317,7 +1335,7 @@ function renderSel(res, idx) {
   } else if (isGate(c.type)) {
     el.innerHTML = `<p><b>${c.type} gate</b></p>
       <label class="row">Type <select id="selType">${GATE_TYPES.map(t => `<option${t === c.type ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
-      ${c.type !== 'NOT' ? `<div class="row">Inputs <button class="btn sm" data-act="nminus" ${c.n <= 2 ? 'disabled' : ''}>−</button><b>${c.n}</b><button class="btn sm" data-act="nplus" ${c.n >= 4 ? 'disabled' : ''}>+</button></div>` : ''}
+      ${c.type !== 'NOT' ? `<div class="row">Inputs <button class="btn sm" data-act="nminus" ${c.n <= 2 ? 'disabled' : ''}>−</button><b>${c.n}</b><button class="btn sm" data-act="nplus" ${c.n >= gateCap(c.type) ? 'disabled' : ''}>+</button></div>` : ''}
       <p class="hint">${GATE_INFO[c.type]}</p>${gateDetails(c, res, idx)}${actions}`;
   } else if (c.type === 'CONST') {
     el.innerHTML = `<p><b>Constant ${c.value}</b></p><p class="hint">Always outputs ${c.value}. Click it on the board to flip it.</p>${actions}`;
@@ -1396,7 +1414,8 @@ function renderAnalysis(idx) {
   $('#taskCard').innerHTML = `<div class="taskcard"><div class="tk-top"><span class="tk-label">${S.task === 'free' ? 'Mode' : 'Task'}</span>
       <button class="btn" data-act="tasks">Change task</button></div>
     <h4>${t.title}</h4><p>${t.desc}</p>
-    ${S.allowed ? `<p style="margin-top:6px"><b>Allowed gates:</b> ${S.allowed.join(', ')} (plus constants)</p>` : ''}
+    ${S.kit ? `<p style="margin-top:6px"><b>Allowed chips:</b> ${S.kit.join(', ')} — that is ${S.allowed.map(g => g === 'NOT' ? 'NOT' : `${gateCap(g)}-input ${g}`).join(', ')} (plus constants)</p>`
+      : S.allowed ? `<p style="margin-top:6px"><b>Allowed gates:</b> ${S.allowed.join(', ')} (plus constants)</p>` : ''}
     ${NOSOL ? '' : `<div class="row"><button class="btn" data-act="solution">💡 Solution suggestions</button></div>`}</div>`;
   // summary
   const gates = gateCount();
@@ -1404,7 +1423,7 @@ function renderAnalysis(idx) {
   let sum = allOk
     ? `<b class="stok">🎉 All ${A.cnt} ${S.disps > 1 ? 'numbers' : 'digits'} correct!</b> You used ${gates} gate${gates === 1 ? '' : 's'}. Can you do it with fewer?`
     : `<b>${A.ok} / ${A.cnt}</b> ${S.disps > 1 ? 'numbers' : 'digits'} correct · <b>${A.segGood.flat().filter(Boolean).length} / ${7 * S.disps}</b> segments done`;
-  if (A.disallowed.length) sum += `<div class="stbad" style="margin-top:4px">⚠ This task only allows ${S.allowed.join(', ')}. Replace: ${A.disallowed.join(', ')}.</div>`;
+  if (A.disallowed.length) sum += `<div class="stbad" style="margin-top:4px">⚠ ${limitMsg()}. Replace: ${A.disallowed.join(', ')}.</div>`;
   if (A.unstable) sum += `<div style="color:var(--warn);margin-top:4px">⚠ Some input values make the circuit oscillate (feedback loop).</div>`;
   sum += `<div class="bar"><i style="width:${A.cnt ? (100 * A.ok / A.cnt) : 0}%"></i></div>`;
   if (A.cnt && A.ok < A.cnt) sum += `<button class="btn" data-act="nexterr" title="Set the inputs to a digit that is still wrong">➜ Jump to a wrong digit</button>`;
@@ -1691,7 +1710,7 @@ function packSolution(gates, kit) {
 }
 function buildSolution() {
   const n = S.disps;
-  const roots = solutionDag(solveAllDisplays(analyze(buildIndex())));   // root k*7+i feeds display k, pin i
+  const roots = solutionDag(solveAllDisplays(analyze(buildIndex())), !!S.kit, S.kit);   // root k*7+i feeds display k, pin i
   const gates = collectGates(roots);
   rankGates(gates, roots, n);
   const maxL = Math.max(0, ...gates.map(g => g.level));
@@ -1743,6 +1762,7 @@ function buildSolution() {
 }
 // the same solution, but wired as real 74HC packages with datasheet pin numbers
 function buildSolutionIC(kit) {
+  kit = kit || S.kit;
   const n = S.disps;
   const roots = solutionDag(solveAllDisplays(analyze(buildIndex())), true, kit);
   const gates = collectGates(roots);
@@ -1815,7 +1835,7 @@ function buildSolutionIC(kit) {
 }
 function renderSolutionTab(A) {
   const sols = solveDisplay(A, dispSel), fam = solutionFamily();
-  const gates = collectGates(solutionDag(solveAllDisplays(A)));
+  const gates = collectGates(solutionDag(solveAllDisplays(A), !!S.kit, S.kit));
   const counts = {};
   gates.forEach(g => { counts[g.op] = (counts[g.op] || 0) + 1; });
   const countTxt = GATE_TYPES.filter(t => counts[t]).map(t => `${counts[t]} ${t}`).join(', ');
@@ -1835,12 +1855,12 @@ function renderSolutionTab(A) {
         ? 'The X inputs now have to blank the display, so they can no longer be used to simplify — that is why this needs more gates. A real decoder chip such as the 74HC4511 does blank them.'
         : 'Right now the X inputs may show anything, which is what makes the answer this short. Tick the box to blank them instead, like a real decoder chip does.'}</p>`;
   }
-  const icRoots = solutionDag(solveAllDisplays(A), true), icGates = collectGates(icRoots);
+  const icRoots = solutionDag(solveAllDisplays(A), true, S.kit), icGates = collectGates(icRoots);
   rankGates(icGates, icRoots, S.disps);
-  const pack = packSolution(icGates), wide = fam === 'nor' ? '74HC27 (3-input NOR)' : '74HC4075 (3-input OR)';
+  const pack = packSolution(icGates, S.kit), wide = fam === 'nor' ? '74HC27 (3-input NOR)' : '74HC4075 (3-input OR)';
   // the same answer once more, but out of the three starter-kit chips alone
   let kitBtn = '', kitTxt = '';
-  if (fam === 'std') {
+  if (fam === 'std' && !S.kit) {
     const kRoots = solutionDag(solveAllDisplays(A), true, IC_KIT), kGates = collectGates(kRoots);
     rankGates(kGates, kRoots, S.disps);
     const kPack = packSolution(kGates, IC_KIT);
@@ -1886,7 +1906,7 @@ function nearestPin(kind, x, y) {
   return best;
 }
 function addComp(type, x, y) {
-  if (!allowedType(type)) { toast(`Only ${S.allowed.join(', ')} gates are allowed in this task.`); return; }
+  if (!allowedType(type)) { toast(limitMsg() + '.'); return; }
   pushUndo();
   const c = ICS[type] ? {id: uid(), type: 'IC', chip: type, x: snap(x), y: snap(y)}
                       : {id: uid(), type, x: snap(x), y: snap(y)};
@@ -1951,7 +1971,7 @@ function editNote(c) {
   commit();
 }
 function setGateInputs(c, n) {
-  n = clamp(n, 2, 4);
+  n = clamp(n, 2, gateCap(c.type));
   if (n === c.n) return;
   pushUndo();
   c.n = n;
@@ -2003,7 +2023,7 @@ function manualSetting(fn) {
   stopPlay();
   pushUndo();
   fn();
-  if (S.task !== 'free') { S.task = 'free'; S.allowed = null; }
+  if (S.task !== 'free') { S.task = 'free'; S.allowed = null; S.kit = null; }
   commit();
 }
 
@@ -2224,7 +2244,7 @@ $('#paletteWrap').addEventListener('pointerdown', e => {
   const item = e.target.closest('.pal');
   if (!item) return;
   e.preventDefault();
-  if (!allowedType(item.dataset.type)) { toast(`Only ${S.allowed.join(', ')} gates are allowed in this task.`); return; }
+  if (!allowedType(item.dataset.type)) { toast(limitMsg() + '.'); return; }
   pal = {type: item.dataset.type, sx: e.clientX, sy: e.clientY, moved: false};
   ghost.innerHTML = paletteIcon(pal.type);
 });
@@ -2432,7 +2452,8 @@ function openTasks() {
   $('#taskList').innerHTML = TASKS.map(t => {
     const tags = t.set ? [`${t.set.bits} bit${t.set.bits > 1 ? 's' : ''}`, t.set.disps > 1 ? `${t.set.disps} displays` : null,
                           modeLabel(t.set.mode, t.set.disps || 1), t.set.disp === 'ca' ? 'common anode' : null,
-                          t.set.allowed ? t.set.allowed.join('/') + ' only' : null].filter(Boolean) : ['any settings'];
+                          t.set.allowed ? t.set.allowed.join('/') + ' only' : null,
+                          t.set.kit ? t.set.kit.map(n => n.slice(4)).join('/') + ' only' : null].filter(Boolean) : ['any settings'];
     return `<button class="taskitem${t.id === S.task ? ' cur' : ''}" data-task="${t.id}"><b>${t.title}</b><span>${t.desc}</span>` +
            `<div class="tags">${tags.map(x => `<em>${x}</em>`).join('')}</div></button>`;
   }).join('');
@@ -2447,7 +2468,8 @@ $('#taskList').addEventListener('click', e => {
   stopPlay();
   pushUndo();
   S.task = t.id;
-  S.allowed = t.set && t.set.allowed ? [...t.set.allowed] : null;
+  S.kit = t.set && t.set.kit ? [...t.set.kit] : null;
+  S.allowed = t.set && t.set.allowed ? [...t.set.allowed] : S.kit ? kitGates(S.kit) : null;
   if (t.set) applySettings(t.set.bits, t.set.mode, t.set.disp, t.set.disps || 1, t.set.lead || 'blank');
   if (clear) { S.comps = S.comps.filter(fixed); S.wires = []; }
   lastAllOk = null;

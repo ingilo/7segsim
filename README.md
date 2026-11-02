@@ -37,7 +37,9 @@ code-signed, so Windows SmartScreen may show "Windows protected your PC" the fir
 - **Turn a part**: select a chip, a gate or the controller and press **R** (**Shift+R** the other way), or use the arrows in
   the *Selected* panel. The labels stay the right way up.
 - **Realistic LED display** with inputs a–g, as a common cathode or common anode display.
-- **Tasks**: a warm-up, 0–3, 0–7, a BCD decoder, a hex decoder, common anode, and NAND-only / NOR-only challenges.
+- **Tasks**: a warm-up, 0–3, 0–7, a BCD decoder, a hex decoder, common anode, NAND-only / NOR-only challenges,
+  two-display numbers, and a BCD decoder you have to build from three chips only (74HC04 + 74HC08 + 74HC32).
+  A task can limit which gates and which packages you may use, and the check panel says what to replace.
 - **Check panel**:
   - Truth table: each segment is marked green or red, with a mini preview of what your circuit shows for every input.
   - Karnaugh map per segment (1–4 bits), with don't-cares and minterm lists.
